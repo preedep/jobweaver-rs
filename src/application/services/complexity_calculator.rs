@@ -70,7 +70,7 @@ impl Default for ComplexityCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::entities::{Condition, SchedulingInfo};
+    use crate::domain::entities::Condition;
 
     #[test]
     fn test_calculate_simple_job_complexity() {

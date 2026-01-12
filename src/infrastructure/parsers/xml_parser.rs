@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
-use quick_xml::de::from_str;
-use std::fs;
+use roxmltree::Document;
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
+use encoding_rs_io::DecodeReaderBytesBuilder;
 
 use crate::domain::entities::*;
 use crate::domain::entities::condition::DoAction;
 use crate::domain::entities::folder::FolderType;
-use super::control_m_models::*;
 
 pub struct ControlMXmlParser;
 
@@ -16,188 +17,182 @@ impl ControlMXmlParser {
     }
 
     pub fn parse_file<P: AsRef<Path>>(&self, path: P) -> Result<Vec<Folder>> {
-        let xml_content = fs::read_to_string(path)
+        let file = File::open(path)
+            .context("Failed to open XML file")?;
+        
+        let mut decoder = DecodeReaderBytesBuilder::new()
+            .encoding(Some(encoding_rs::WINDOWS_1252))
+            .build(file);
+        
+        let mut xml_content = String::new();
+        decoder.read_to_string(&mut xml_content)
             .context("Failed to read XML file")?;
         
-        self.parse_xml(&xml_content)
+        // Sanitize XML by removing invalid control characters
+        let sanitized = self.sanitize_xml(&xml_content);
+        
+        self.parse_xml(&sanitized)
+    }
+
+    fn sanitize_xml(&self, xml: &str) -> String {
+        xml.chars()
+            .filter(|&c| {
+                // Keep valid XML characters:
+                // - Tab (0x09), LF (0x0A), CR (0x0D)
+                // - Printable ASCII and Unicode (>= 0x20)
+                c == '\t' || c == '\n' || c == '\r' || c >= ' '
+            })
+            .collect()
     }
 
     pub fn parse_xml(&self, xml_content: &str) -> Result<Vec<Folder>> {
-        let def_table: DefTable = from_str(xml_content)
+        let doc = Document::parse(xml_content)
             .context("Failed to parse XML")?;
 
         let mut folders = Vec::new();
-
-        for xml_folder in def_table.folders {
-            folders.push(self.convert_folder(xml_folder, FolderType::Simple)?);
-        }
-
-        for xml_folder in def_table.smart_folders {
-            folders.push(self.convert_smart_folder(xml_folder, FolderType::Smart)?);
-        }
-
-        for xml_folder in def_table.tables {
-            folders.push(self.convert_folder(xml_folder, FolderType::Table)?);
-        }
-
-        for xml_folder in def_table.smart_tables {
-            folders.push(self.convert_smart_folder(xml_folder, FolderType::SmartTable)?);
+        
+        let root = doc.root_element();
+        
+        for node in root.children() {
+            if !node.is_element() {
+                continue;
+            }
+            
+            let tag_name = node.tag_name().name();
+            
+            match tag_name {
+                "FOLDER" => {
+                    if let Ok(folder) = self.parse_folder_node(&node, FolderType::Simple) {
+                        folders.push(folder);
+                    }
+                }
+                "SMART_FOLDER" => {
+                    if let Ok(folder) = self.parse_folder_node(&node, FolderType::Smart) {
+                        folders.push(folder);
+                    }
+                }
+                "TABLE" => {
+                    if let Ok(folder) = self.parse_folder_node(&node, FolderType::Table) {
+                        folders.push(folder);
+                    }
+                }
+                "SMART_TABLE" => {
+                    if let Ok(folder) = self.parse_folder_node(&node, FolderType::SmartTable) {
+                        folders.push(folder);
+                    }
+                }
+                _ => {}
+            }
         }
 
         Ok(folders)
     }
-
-    fn convert_folder(&self, xml_folder: XmlFolder, folder_type: FolderType) -> Result<Folder> {
-        let folder_name = xml_folder.folder_name
-            .or(xml_folder.table_name)
-            .unwrap_or_else(|| "UNKNOWN".to_string());
-
-        let mut folder = Folder::new(folder_name.clone(), folder_type);
-        folder.datacenter = xml_folder.datacenter;
-        folder.application = xml_folder.application;
-
-        for xml_job in xml_folder.jobs {
-            let job = self.convert_job(xml_job, folder_name.clone())?;
-            folder.add_job(job);
-        }
-
-        Ok(folder)
-    }
-
-    fn convert_smart_folder(&self, xml_folder: XmlSmartFolder, folder_type: FolderType) -> Result<Folder> {
-        let folder_name = xml_folder.folder_name
-            .or(xml_folder.table_name)
-            .unwrap_or_else(|| "UNKNOWN".to_string());
-
-        let mut folder = Folder::new(folder_name.clone(), folder_type);
-        folder.datacenter = xml_folder.datacenter;
-        folder.application = xml_folder.application;
-
-        for xml_job in xml_folder.jobs {
-            let job = self.convert_job(xml_job, folder_name.clone())?;
-            folder.add_job(job);
-        }
-
-        for xml_sub_folder in xml_folder.sub_folders {
-            let sub_folder = self.convert_smart_folder(xml_sub_folder, FolderType::Smart)?;
-            folder.add_sub_folder(sub_folder);
-        }
-
-        Ok(folder)
-    }
-
-    fn convert_job(&self, xml_job: XmlJob, folder_name: String) -> Result<Job> {
-        let job_name = xml_job.job_name.clone().unwrap_or_else(|| "UNKNOWN".to_string());
-        let mut job = Job::new(job_name, folder_name);
-
-        job.application = xml_job.application.clone();
-        job.sub_application = xml_job.sub_application.clone();
-        job.description = xml_job.description.clone();
-        job.owner = xml_job.owner.clone();
-        job.run_as = xml_job.run_as.clone();
-        job.priority = xml_job.priority.clone();
-        job.critical = xml_job.critical.as_deref() == Some("Y");
-        job.task_type = xml_job.task_type.clone();
-        job.cyclic = xml_job.cyclic.as_deref() == Some("Y");
-        job.node_id = xml_job.node_id.clone();
-        job.cmdline = xml_job.cmdline.clone();
-
-        job.scheduling = self.convert_scheduling(&xml_job);
-
-        job.created_by = xml_job.created_by.clone();
-        job.creation_date = xml_job.creation_date.clone();
-        job.change_userid = xml_job.change_userid.clone();
-        job.change_date = xml_job.change_date.clone();
-
-        for xml_incond in xml_job.in_conditions {
-            if let Some(name) = xml_incond.name {
-                let mut cond = Condition::new_in(name);
-                cond.odate = xml_incond.odate;
-                cond.and_or = xml_incond.and_or;
-                job.in_conditions.push(cond);
+    
+    fn parse_folder_node(&self, node: &roxmltree::Node, folder_type: FolderType) -> Result<Folder> {
+        let folder_name = node.attribute("FOLDER_NAME")
+            .or_else(|| node.attribute("TABLE_NAME"))
+            .unwrap_or("UNKNOWN")
+            .to_string();
+        
+        let mut folder = Folder::new(folder_name, folder_type);
+        folder.datacenter = node.attribute("DATACENTER").map(|s| s.to_string());
+        folder.application = node.attribute("APPLICATION").map(|s| s.to_string());
+        
+        for child in node.children() {
+            if !child.is_element() {
+                continue;
             }
-        }
-
-        for xml_outcond in xml_job.out_conditions {
-            if let Some(name) = xml_outcond.name {
-                let cond = Condition::new_out(name);
-                job.out_conditions.push(cond);
-            }
-        }
-
-        for xml_on in xml_job.on_conditions {
-            let mut on_cond = OnCondition::new();
-            on_cond.stmt = xml_on.stmt;
-            on_cond.code = xml_on.code;
-            on_cond.pattern = xml_on.pattern;
             
-            for xml_action in xml_on.do_actions {
-                if let Some(action) = xml_action.action {
-                    on_cond.actions.push(DoAction::Action(action));
+            if child.tag_name().name() == "JOB" {
+                if let Ok(job) = self.parse_job_node(&child, folder.folder_name.clone()) {
+                    folder.add_job(job);
                 }
             }
-            
-            job.on_conditions.push(on_cond);
         }
-
-        for xml_ctrl in xml_job.control_resources {
-            if let Some(name) = xml_ctrl.name {
-                let mut resource = ControlResource::new(name);
-                resource.resource_type = xml_ctrl.resource_type;
-                resource.on_fail = xml_ctrl.on_fail;
-                job.control_resources.push(resource);
-            }
-        }
-
-        for xml_quant in xml_job.quantitative_resources {
-            if let Some(name) = xml_quant.name {
-                let quantity = xml_quant.quantity
-                    .and_then(|q| q.parse::<i32>().ok())
-                    .unwrap_or(1);
-                let mut resource = QuantitativeResource::new(name, quantity);
-                resource.on_fail = xml_quant.on_fail;
-                resource.on_ok = xml_quant.on_ok;
-                job.quantitative_resources.push(resource);
-            }
-        }
-
-        for xml_var in xml_job.variables {
-            if let (Some(name), Some(value)) = (xml_var.name, xml_var.value) {
-                job.variables.insert(name, value);
-            }
-        }
-
-        for xml_var in xml_job.auto_edits {
-            if let (Some(name), Some(value)) = (xml_var.name, xml_var.value) {
-                job.auto_edits.insert(name, value);
-            }
-        }
-
-        Ok(job)
+        
+        Ok(folder)
     }
-
-    fn convert_scheduling(&self, xml_job: &XmlJob) -> SchedulingInfo {
-        let mut sched = SchedulingInfo::new();
+    
+    fn parse_job_node(&self, node: &roxmltree::Node, folder_name: String) -> Result<Job> {
+        let job_name = node.attribute("JOBNAME").unwrap_or("UNKNOWN").to_string();
+        let mut job = Job::new(job_name, folder_name);
         
-        sched.time_from = xml_job.time_from.clone();
-        sched.time_to = xml_job.time_to.clone();
-        sched.days = xml_job.days.clone();
-        sched.weekdays = xml_job.weekdays.clone();
-        sched.days_calendar = xml_job.days_cal.clone();
-        sched.weeks_calendar = xml_job.weeks_cal.clone();
-        sched.conf_calendar = xml_job.conf_cal.clone();
-        sched.cyclic_interval = xml_job.cyclic_interval_sequence.clone();
-        sched.cyclic_times = xml_job.cyclic_times_sequence.clone();
+        job.application = node.attribute("APPLICATION").map(|s| s.to_string());
+        job.sub_application = node.attribute("SUB_APPLICATION").map(|s| s.to_string());
+        job.description = node.attribute("DESCRIPTION").map(|s| s.to_string());
+        job.owner = node.attribute("OWNER").map(|s| s.to_string());
+        job.run_as = node.attribute("RUN_AS").map(|s| s.to_string());
+        job.priority = node.attribute("PRIORITY").map(|s| s.to_string());
+        job.critical = node.attribute("CRITICAL") == Some("Y");
+        job.task_type = node.attribute("TASKTYPE").map(|s| s.to_string());
+        job.cyclic = node.attribute("CYCLIC") == Some("Y");
+        job.node_id = node.attribute("NODEID").map(|s| s.to_string());
+        job.cmdline = node.attribute("CMDLINE").map(|s| s.to_string());
         
-        if let Some(max_wait) = &xml_job.max_wait {
-            sched.max_wait = max_wait.parse::<i32>().ok();
+        job.scheduling.time_from = node.attribute("TIMEFROM").map(|s| s.to_string());
+        job.scheduling.time_to = node.attribute("TIMETO").map(|s| s.to_string());
+        job.scheduling.days_calendar = node.attribute("DAYSCAL").map(|s| s.to_string());
+        job.scheduling.weeks_calendar = node.attribute("WEEKSCAL").map(|s| s.to_string());
+        job.scheduling.conf_calendar = node.attribute("CONFCAL").map(|s| s.to_string());
+        
+        for child in node.children() {
+            if !child.is_element() {
+                continue;
+            }
+            
+            match child.tag_name().name() {
+                "INCOND" => {
+                    if let Some(name) = child.attribute("NAME") {
+                        let cond = Condition::new_in(name.to_string());
+                        job.in_conditions.push(cond);
+                    }
+                }
+                "OUTCOND" => {
+                    if let Some(name) = child.attribute("NAME") {
+                        let cond = Condition::new_out(name.to_string());
+                        job.out_conditions.push(cond);
+                    }
+                }
+                "VARIABLE" => {
+                    if let (Some(name), Some(value)) = (child.attribute("NAME"), child.attribute("VALUE")) {
+                        job.variables.insert(name.to_string(), value.to_string());
+                    }
+                }
+                "CONTROL" => {
+                    if let Some(name) = child.attribute("NAME") {
+                        let resource = ControlResource::new(name.to_string());
+                        job.control_resources.push(resource);
+                    }
+                }
+                "QUANTITATIVE" => {
+                    if let Some(name) = child.attribute("NAME") {
+                        let quant = child.attribute("QUANT")
+                            .and_then(|q| q.parse::<i32>().ok())
+                            .unwrap_or(1);
+                        let resource = QuantitativeResource::new(name.to_string(), quant);
+                        job.quantitative_resources.push(resource);
+                    }
+                }
+                "ON" => {
+                    let mut on_cond = OnCondition::new();
+                    on_cond.stmt = child.attribute("STMT").map(|s| s.to_string());
+                    on_cond.code = child.attribute("CODE").map(|s| s.to_string());
+                    
+                    for action_node in child.children() {
+                        if action_node.is_element() && action_node.tag_name().name() == "DOACTION" {
+                            if let Some(action) = action_node.attribute("ACTION") {
+                                on_cond.actions.push(DoAction::Action(action.to_string()));
+                            }
+                        }
+                    }
+                    
+                    job.on_conditions.push(on_cond);
+                }
+                _ => {}
+            }
         }
         
-        if let Some(max_rerun) = &xml_job.max_rerun {
-            sched.max_rerun = max_rerun.parse::<i32>().ok();
-        }
-
-        sched
+        Ok(job)
     }
 }
 

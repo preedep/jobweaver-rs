@@ -66,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_csv_generator_creation() {
-        let generator = CsvGenerator::new();
+        let _generator = CsvGenerator::new();
         assert!(true);
     }
 }

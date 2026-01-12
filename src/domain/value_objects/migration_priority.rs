@@ -20,17 +20,17 @@ impl MigrationPriority {
     ) -> Self {
         let difficulty = MigrationDifficulty::from_complexity_score(complexity_score);
         
-        let base_priority = match difficulty {
+        let base_priority: u32 = match difficulty {
             MigrationDifficulty::Easy => 100,
             MigrationDifficulty::Medium => 50,
             MigrationDifficulty::Hard => 10,
         };
 
-        let critical_bonus = if is_critical { 50 } else { 0 };
+        let critical_bonus: u32 = if is_critical { 50 } else { 0 };
         
-        let dependency_penalty = (dependency_count as u32) * 2;
+        let dependency_penalty: u32 = (dependency_count as u32) * 2;
 
-        let priority = base_priority + critical_bonus - dependency_penalty;
+        let priority = base_priority.saturating_add(critical_bonus).saturating_sub(dependency_penalty);
         
         Self(priority.max(1))
     }

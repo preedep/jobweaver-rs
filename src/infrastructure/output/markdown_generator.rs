@@ -99,7 +99,7 @@ impl Default for MarkdownGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::presentation::dto::{SummaryOutput, WaveOutput};
+    use crate::presentation::dto::SummaryOutput;
 
     #[test]
     fn test_generate_string() {
