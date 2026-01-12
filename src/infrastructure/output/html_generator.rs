@@ -115,63 +115,63 @@ impl HtmlGenerator {
         html.push_str("        <div class=\"methodology\">\n");
         html.push_str("            <h2>📐 Complexity Scoring Methodology</h2>\n");
         html.push_str("            <p class=\"methodology-intro\">The complexity score is calculated based on multiple factors that affect migration difficulty:<br>\n");
-        html.push_str("            <span class=\"thai-text\">คะแนนความซับซ้อนคำนวณจากหลายปัจจัยที่ส่งผลต่อความยากในการย้ายระบบ:</span></p>\n");
+        html.push_str("            <span class=\"thai-text\">คะแนนความซับซ้อนคำนวณจากปัจจัยต่างๆ ของ Control-M ที่ส่งผลต่อความยากในการย้ายไป Airflow</span></p>\n");
         html.push_str("            <div class=\"scoring-grid\">\n");
         html.push_str("                <div class=\"scoring-item\">\n");
         html.push_str("                    <div class=\"scoring-icon\">🔗</div>\n");
         html.push_str("                    <div class=\"scoring-title\">Dependencies</div>\n");
         html.push_str("                    <div class=\"scoring-value\">3 points each</div>\n");
         html.push_str("                    <div class=\"scoring-desc\">In-conditions and control resources<br>\n");
-        html.push_str("                    <span class=\"thai-text\">การพึ่งพาและทรัพยากรควบคุม</span></div>\n");
+        html.push_str("                    <span class=\"thai-text\">In-Condition และ Control Resource ที่ Job ต้องรอ</span></div>\n");
         html.push_str("                </div>\n");
         html.push_str("                <div class=\"scoring-item\">\n");
         html.push_str("                    <div class=\"scoring-icon\">📊</div>\n");
         html.push_str("                    <div class=\"scoring-title\">Dependency Depth</div>\n");
         html.push_str("                    <div class=\"scoring-value\">5 points per level</div>\n");
         html.push_str("                    <div class=\"scoring-desc\">Depth of dependency chain<br>\n");
-        html.push_str("                    <span class=\"thai-text\">ความลึกของห่วงโซ่การพึ่งพา</span></div>\n");
+        html.push_str("                    <span class=\"thai-text\">ความลึกของ Job ที่ต้องรอกัน (A รอ B, B รอ C)</span></div>\n");
         html.push_str("                </div>\n");
         html.push_str("                <div class=\"scoring-item\">\n");
         html.push_str("                    <div class=\"scoring-icon\">🎯</div>\n");
         html.push_str("                    <div class=\"scoring-title\">Conditions</div>\n");
         html.push_str("                    <div class=\"scoring-value\">2 points each</div>\n");
         html.push_str("                    <div class=\"scoring-desc\">In/out conditions<br>\n");
-        html.push_str("                    <span class=\"thai-text\">เงื่อนไขเข้า/ออก</span></div>\n");
+        html.push_str("                    <span class=\"thai-text\">In-Condition และ Out-Condition ทั้งหมด</span></div>\n");
         html.push_str("                </div>\n");
         html.push_str("                <div class=\"scoring-item\">\n");
         html.push_str("                    <div class=\"scoring-icon\">📝</div>\n");
         html.push_str("                    <div class=\"scoring-title\">Variables</div>\n");
         html.push_str("                    <div class=\"scoring-value\">1 point each</div>\n");
         html.push_str("                    <div class=\"scoring-desc\">Job variables and auto-edits<br>\n");
-        html.push_str("                    <span class=\"thai-text\">ตัวแปรและการแก้ไขอัตโนมัติ</span></div>\n");
+        html.push_str("                    <span class=\"thai-text\">Variable และ Auto-Edit ที่ใช้ใน Job</span></div>\n");
         html.push_str("                </div>\n");
         html.push_str("                <div class=\"scoring-item\">\n");
         html.push_str("                    <div class=\"scoring-icon\">⚙️</div>\n");
         html.push_str("                    <div class=\"scoring-title\">ON Conditions</div>\n");
         html.push_str("                    <div class=\"scoring-value\">4+ points each</div>\n");
         html.push_str("                    <div class=\"scoring-desc\">Conditional logic complexity<br>\n");
-        html.push_str("                    <span class=\"thai-text\">ความซับซ้อนของตรรกะเงื่อนไข</span></div>\n");
+        html.push_str("                    <span class=\"thai-text\">ON Statement (OK/NOTOK/RERUN) ที่มีใน Job</span></div>\n");
         html.push_str("                </div>\n");
         html.push_str("                <div class=\"scoring-item\">\n");
         html.push_str("                    <div class=\"scoring-icon\">🔄</div>\n");
         html.push_str("                    <div class=\"scoring-title\">Cyclic Jobs</div>\n");
         html.push_str("                    <div class=\"scoring-value\">15 points</div>\n");
         html.push_str("                    <div class=\"scoring-desc\">Jobs with cyclic execution<br>\n");
-        html.push_str("                    <span class=\"thai-text\">งานที่ทำงานแบบวนซ้ำ</span></div>\n");
+        html.push_str("                    <span class=\"thai-text\">Job ที่ Cyclic = Y (รันซ้ำตามเงื่อนไข)</span></div>\n");
         html.push_str("                </div>\n");
         html.push_str("                <div class=\"scoring-item\">\n");
         html.push_str("                    <div class=\"scoring-icon\">💾</div>\n");
         html.push_str("                    <div class=\"scoring-title\">Resources</div>\n");
         html.push_str("                    <div class=\"scoring-value\">3 points each</div>\n");
         html.push_str("                    <div class=\"scoring-desc\">Quantitative and control resources<br>\n");
-        html.push_str("                    <span class=\"thai-text\">ทรัพยากรเชิงปริมาณและควบคุม</span></div>\n");
+        html.push_str("                    <span class=\"thai-text\">Quantitative Resource และ Control Resource</span></div>\n");
         html.push_str("                </div>\n");
         html.push_str("                <div class=\"scoring-item\">\n");
         html.push_str("                    <div class=\"scoring-icon\">📅</div>\n");
         html.push_str("                    <div class=\"scoring-title\">Scheduling</div>\n");
         html.push_str("                    <div class=\"scoring-value\">2 points per feature</div>\n");
         html.push_str("                    <div class=\"scoring-desc\">Calendars, time windows, etc.<br>\n");
-        html.push_str("                    <span class=\"thai-text\">ปฏิทิน ช่วงเวลา ฯลฯ</span></div>\n");
+        html.push_str("                    <span class=\"thai-text\">Calendar, Time Window, Schedule ต่างๆ</span></div>\n");
         html.push_str("                </div>\n");
         html.push_str("            </div>\n");
         html.push_str("            <div class=\"difficulty-legend\">\n");
@@ -180,17 +180,17 @@ impl HtmlGenerator {
         html.push_str("                    <div class=\"legend-item\">\n");
         html.push_str("                        <span class=\"legend-badge easy\">Easy</span>\n");
         html.push_str("                        <span class=\"legend-text\">0-30 points: Simple jobs with minimal dependencies<br>\n");
-        html.push_str("                        <span class=\"thai-text\">งานง่ายที่มีการพึ่งพาน้อย</span></span>\n");
+        html.push_str("                        <span class=\"thai-text\">Job ง่าย ไม่มี/มีน้อย Dependency - ย้ายได้เร็ว</span></span>\n");
         html.push_str("                    </div>\n");
         html.push_str("                    <div class=\"legend-item\">\n");
         html.push_str("                        <span class=\"legend-badge medium\">Medium</span>\n");
         html.push_str("                        <span class=\"legend-text\">31-60 points: Moderate complexity with some dependencies<br>\n");
-        html.push_str("                        <span class=\"thai-text\">ความซับซ้อนปานกลางมีการพึ่งพาบ้าง</span></span>\n");
+        html.push_str("                        <span class=\"thai-text\">Job ปานกลาง มี Condition/Resource บ้าง - ต้องวางแผน</span></span>\n");
         html.push_str("                    </div>\n");
         html.push_str("                    <div class=\"legend-item\">\n");
         html.push_str("                        <span class=\"legend-badge hard\">Hard</span>\n");
         html.push_str("                        <span class=\"legend-text\">61+ points: Complex jobs requiring careful planning<br>\n");
-        html.push_str("                        <span class=\"thai-text\">งานซับซ้อนต้องวางแผนอย่างรอบคอบ</span></span>\n");
+        html.push_str("                        <span class=\"thai-text\">Job ซับซ้อน มี Dependency/ON Condition เยอะ - ต้องระวัง</span></span>\n");
         html.push_str("                    </div>\n");
         html.push_str("                </div>\n");
         html.push_str("            </div>\n");
@@ -198,7 +198,17 @@ impl HtmlGenerator {
         
         html.push_str("        <div class=\"jobs\">\n");
         html.push_str("            <h2>📋 Job Details</h2>\n");
-        html.push_str("            <p class=\"table-info\">Interactive table with search, sort, and pagination. Showing all jobs.</p>\n");
+        html.push_str("            <div class=\"filter-container\">\n");
+        html.push_str("                <label for=\"waveFilter\">Filter by Wave: </label>\n");
+        html.push_str("                <select id=\"waveFilter\">\n");
+        html.push_str("                    <option value=\"\">All Waves</option>\n");
+        for wave in &output.migration_waves {
+            let selected = if wave.wave == 1 { " selected" } else { "" };
+            html.push_str(&format!("                    <option value=\"{}\"{}>Wave {} ({} jobs)</option>\n", wave.wave, selected, wave.wave, wave.jobs.len()));
+        }
+        html.push_str("                </select>\n");
+        html.push_str("            </div>\n");
+        html.push_str("            <p class=\"table-info\">Interactive table with search, sort, and pagination. Use the dropdown above to filter by wave.</p>\n");
         html.push_str("            <table id=\"jobsTable\" class=\"display\">\n");
         html.push_str("                <thead>\n");
         html.push_str("                    <tr>\n");
@@ -207,10 +217,7 @@ impl HtmlGenerator {
         html.push_str("                        <th>Wave</th>\n");
         html.push_str("                        <th>Complexity</th>\n");
         html.push_str("                        <th>Difficulty</th>\n");
-        html.push_str("                        <th>Priority</th>\n");
-        html.push_str("                        <th>Critical</th>\n");
         html.push_str("                        <th>Dependencies</th>\n");
-        html.push_str("                        <th>Effort (hrs)</th>\n");
         html.push_str("                    </tr>\n");
         html.push_str("                </thead>\n");
         html.push_str("                <tbody>\n");
@@ -229,10 +236,7 @@ impl HtmlGenerator {
             html.push_str(&format!("                        <td><span class=\"wave-badge\">Wave {}</span></td>\n", job.migration_wave));
             html.push_str(&format!("                        <td>{}</td>\n", job.complexity_score));
             html.push_str(&format!("                        <td><span class=\"{}\">{}</span></td>\n", difficulty_class, job.migration_difficulty));
-            html.push_str(&format!("                        <td>{}</td>\n", job.migration_priority));
-            html.push_str(&format!("                        <td>{}</td>\n", if job.is_critical { "⚡ Yes" } else { "" }));
             html.push_str(&format!("                        <td>{}</td>\n", job.dependency_count));
-            html.push_str(&format!("                        <td>{}</td>\n", job.estimated_effort_hours));
             html.push_str("                    </tr>\n");
         }
 
@@ -245,20 +249,17 @@ impl HtmlGenerator {
         // Add DataTables initialization
         html.push_str("    <script>\n");
         html.push_str("        $(document).ready(function() {\n");
-        html.push_str("            $('#jobsTable').DataTable({\n");
+        html.push_str("            var table = $('#jobsTable').DataTable({\n");
         html.push_str("                pageLength: 50,\n");
         html.push_str("                order: [[3, 'desc']],\n");
         html.push_str("                lengthMenu: [[25, 50, 100, 500, -1], [25, 50, 100, 500, 'All']],\n");
         html.push_str("                columnDefs: [\n");
-        html.push_str("                    { width: '25%', targets: 0 },  // Job Name\n");
-        html.push_str("                    { width: '15%', targets: 1 },  // Folder\n");
-        html.push_str("                    { width: '10%', targets: 2 },  // Wave\n");
-        html.push_str("                    { width: '10%', targets: 3 },  // Complexity\n");
-        html.push_str("                    { width: '10%', targets: 4 },  // Difficulty\n");
-        html.push_str("                    { width: '8%', targets: 5 },   // Priority\n");
-        html.push_str("                    { width: '8%', targets: 6 },   // Critical\n");
-        html.push_str("                    { width: '8%', targets: 7 },   // Dependencies\n");
-        html.push_str("                    { width: '8%', targets: 8 }    // Effort\n");
+        html.push_str("                    { width: '30%', targets: 0 },  // Job Name\n");
+        html.push_str("                    { width: '25%', targets: 1 },  // Folder\n");
+        html.push_str("                    { width: '15%', targets: 2 },  // Wave\n");
+        html.push_str("                    { width: '12%', targets: 3 },  // Complexity\n");
+        html.push_str("                    { width: '12%', targets: 4 },  // Difficulty\n");
+        html.push_str("                    { width: '10%', targets: 5 }   // Dependencies\n");
         html.push_str("                ],\n");
         html.push_str("                language: {\n");
         html.push_str("                    search: 'Search jobs:',\n");
@@ -267,6 +268,19 @@ impl HtmlGenerator {
         html.push_str("                    infoFiltered: '(filtered from _MAX_ total jobs)'\n");
         html.push_str("                }\n");
         html.push_str("            });\n");
+        html.push_str("            \n");
+        html.push_str("            // Wave filter functionality\n");
+        html.push_str("            $('#waveFilter').on('change', function() {\n");
+        html.push_str("                var selectedWave = this.value;\n");
+        html.push_str("                if (selectedWave === '') {\n");
+        html.push_str("                    table.column(2).search('').draw();\n");
+        html.push_str("                } else {\n");
+        html.push_str("                    table.column(2).search('Wave ' + selectedWave, true, false).draw();\n");
+        html.push_str("                }\n");
+        html.push_str("            });\n");
+        html.push_str("            \n");
+        html.push_str("            // Set Wave 1 as default filter on page load\n");
+        html.push_str("            table.column(2).search('Wave 1', true, false).draw();\n");
         html.push_str("        });\n");
         html.push_str("    </script>\n");
         
@@ -521,6 +535,33 @@ impl HtmlGenerator {
         /* Table Styles */
         .jobs {
             margin: 40px 0;
+        }
+        .filter-container {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .filter-container label {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 1em;
+        }
+        .filter-container select {
+            padding: 8px 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+            min-width: 200px;
+        }
+        .filter-container select:focus {
+            outline: none;
+            border-color: #3498db;
         }
         .table-info {
             color: #7f8c8d;
