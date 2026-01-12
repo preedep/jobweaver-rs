@@ -1,8 +1,9 @@
 use anyhow::Result;
-use std::fs::File;
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use std::path::Path;
 use crate::presentation::dto::AnalysisOutput;
+use serde_json;
 
 pub struct HtmlGenerator;
 
@@ -12,9 +13,58 @@ impl HtmlGenerator {
     }
 
     pub fn generate<P: AsRef<Path>>(&self, output: &AnalysisOutput, path: P) -> Result<()> {
+        let path_ref = path.as_ref();
+        
+        // Create data directory next to HTML file
+        let parent_dir = path_ref.parent().unwrap_or(Path::new("."));
+        let data_dir = parent_dir.join("data");
+        create_dir_all(&data_dir)?;
+        
+        // Generate wave JSON files
+        self.generate_wave_json_files(output, &data_dir)?;
+        
+        // Generate HTML
         let html = self.generate_string(output)?;
         let mut file = File::create(path)?;
         file.write_all(html.as_bytes())?;
+        Ok(())
+    }
+    
+    fn generate_wave_json_files(&self, output: &AnalysisOutput, data_dir: &Path) -> Result<()> {
+        use serde::Serialize;
+        
+        #[derive(Serialize)]
+        struct WaveJobData {
+            job_name: String,
+            folder_name: String,
+            migration_wave: usize,
+            complexity_score: u32,
+            migration_difficulty: String,
+            dependency_count: usize,
+        }
+        
+        // Group jobs by wave
+        for wave_num in 1..=5 {
+            let wave_jobs: Vec<WaveJobData> = output.jobs.iter()
+                .filter(|j| j.migration_wave == wave_num)
+                .map(|j| WaveJobData {
+                    job_name: j.job_name.clone(),
+                    folder_name: j.folder_name.clone(),
+                    migration_wave: j.migration_wave,
+                    complexity_score: j.complexity_score,
+                    migration_difficulty: j.migration_difficulty.clone(),
+                    dependency_count: j.dependency_count,
+                })
+                .collect();
+            
+            if !wave_jobs.is_empty() {
+                let json_path = data_dir.join(format!("wave_{}.json", wave_num));
+                let json_content = serde_json::to_string(&wave_jobs)?;
+                let mut file = File::create(json_path)?;
+                file.write_all(json_content.as_bytes())?;
+            }
+        }
+        
         Ok(())
     }
 
@@ -209,7 +259,10 @@ impl HtmlGenerator {
         html.push_str("                </select>\n");
         html.push_str("            </div>\n");
         html.push_str("            <p class=\"table-info\">Interactive table with search, sort, and pagination. Use the dropdown above to filter by wave.</p>\n");
-        html.push_str("            <table id=\"jobsTable\" class=\"display\">\n");
+        html.push_str("            <div id=\"loadingMessage\" style=\"text-align: center; padding: 20px; color: #7f8c8d;\">\n");
+        html.push_str("                <p>⏳ Loading Wave 1 jobs...</p>\n");
+        html.push_str("            </div>\n");
+        html.push_str("            <table id=\"jobsTable\" class=\"display\" style=\"display: none;\">\n");
         html.push_str("                <thead>\n");
         html.push_str("                    <tr>\n");
         html.push_str("                        <th>Job Name</th>\n");
@@ -220,67 +273,92 @@ impl HtmlGenerator {
         html.push_str("                        <th>Dependencies</th>\n");
         html.push_str("                    </tr>\n");
         html.push_str("                </thead>\n");
-        html.push_str("                <tbody>\n");
-
-        for job in &output.jobs {
-            let difficulty_class = match job.migration_difficulty.as_str() {
-                "Easy" => "easy",
-                "Medium" => "medium",
-                "Hard" => "hard",
-                _ => "",
-            };
-
-            html.push_str("                    <tr>\n");
-            html.push_str(&format!("                        <td>{}</td>\n", job.job_name));
-            html.push_str(&format!("                        <td>{}</td>\n", job.folder_name));
-            html.push_str(&format!("                        <td><span class=\"wave-badge\">Wave {}</span></td>\n", job.migration_wave));
-            html.push_str(&format!("                        <td>{}</td>\n", job.complexity_score));
-            html.push_str(&format!("                        <td><span class=\"{}\">{}</span></td>\n", difficulty_class, job.migration_difficulty));
-            html.push_str(&format!("                        <td>{}</td>\n", job.dependency_count));
-            html.push_str("                    </tr>\n");
-        }
-
+        html.push_str("                <tbody id=\"jobsTableBody\">\n");
         html.push_str("                </tbody>\n");
         html.push_str("            </table>\n");
         html.push_str("        </div>\n");
 
         html.push_str("    </div>\n");
         
-        // Add DataTables initialization
+        // Add DataTables initialization with dynamic data loading
         html.push_str("    <script>\n");
-        html.push_str("        $(document).ready(function() {\n");
-        html.push_str("            var table = $('#jobsTable').DataTable({\n");
-        html.push_str("                pageLength: 50,\n");
-        html.push_str("                order: [[3, 'desc']],\n");
-        html.push_str("                lengthMenu: [[25, 50, 100, 500, -1], [25, 50, 100, 500, 'All']],\n");
-        html.push_str("                columnDefs: [\n");
-        html.push_str("                    { width: '30%', targets: 0 },  // Job Name\n");
-        html.push_str("                    { width: '25%', targets: 1 },  // Folder\n");
-        html.push_str("                    { width: '15%', targets: 2 },  // Wave\n");
-        html.push_str("                    { width: '12%', targets: 3 },  // Complexity\n");
-        html.push_str("                    { width: '12%', targets: 4 },  // Difficulty\n");
-        html.push_str("                    { width: '10%', targets: 5 }   // Dependencies\n");
-        html.push_str("                ],\n");
-        html.push_str("                language: {\n");
-        html.push_str("                    search: 'Search jobs:',\n");
-        html.push_str("                    lengthMenu: 'Show _MENU_ jobs per page',\n");
-        html.push_str("                    info: 'Showing _START_ to _END_ of _TOTAL_ jobs',\n");
-        html.push_str("                    infoFiltered: '(filtered from _MAX_ total jobs)'\n");
-        html.push_str("                }\n");
-        html.push_str("            });\n");
+        html.push_str("        var table = null;\n");
+        html.push_str("        var currentWave = 1;\n");
+        html.push_str("        \n");
+        html.push_str("        function getDifficultyClass(difficulty) {\n");
+        html.push_str("            switch(difficulty) {\n");
+        html.push_str("                case 'Easy': return 'easy';\n");
+        html.push_str("                case 'Medium': return 'medium';\n");
+        html.push_str("                case 'Hard': return 'hard';\n");
+        html.push_str("                default: return '';\n");
+        html.push_str("            }\n");
+        html.push_str("        }\n");
+        html.push_str("        \n");
+        html.push_str("        function loadWaveData(waveNum) {\n");
+        html.push_str("            $('#loadingMessage').show();\n");
+        html.push_str("            $('#loadingMessage p').text('⏳ Loading Wave ' + waveNum + ' jobs...');\n");
+        html.push_str("            $('#jobsTable').hide();\n");
         html.push_str("            \n");
+        html.push_str("            $.getJSON('data/wave_' + waveNum + '.json', function(data) {\n");
+        html.push_str("                if (table) {\n");
+        html.push_str("                    table.destroy();\n");
+        html.push_str("                }\n");
+        html.push_str("                \n");
+        html.push_str("                var tbody = $('#jobsTableBody');\n");
+        html.push_str("                tbody.empty();\n");
+        html.push_str("                \n");
+        html.push_str("                data.forEach(function(job) {\n");
+        html.push_str("                    var diffClass = getDifficultyClass(job.migration_difficulty);\n");
+        html.push_str("                    var row = '<tr>' +\n");
+        html.push_str("                        '<td>' + job.job_name + '</td>' +\n");
+        html.push_str("                        '<td>' + job.folder_name + '</td>' +\n");
+        html.push_str("                        '<td><span class=\"wave-badge\">Wave ' + job.migration_wave + '</span></td>' +\n");
+        html.push_str("                        '<td>' + job.complexity_score + '</td>' +\n");
+        html.push_str("                        '<td><span class=\"' + diffClass + '\">' + job.migration_difficulty + '</span></td>' +\n");
+        html.push_str("                        '<td>' + job.dependency_count + '</td>' +\n");
+        html.push_str("                        '</tr>';\n");
+        html.push_str("                    tbody.append(row);\n");
+        html.push_str("                });\n");
+        html.push_str("                \n");
+        html.push_str("                $('#loadingMessage').hide();\n");
+        html.push_str("                $('#jobsTable').show();\n");
+        html.push_str("                \n");
+        html.push_str("                table = $('#jobsTable').DataTable({\n");
+        html.push_str("                    pageLength: 50,\n");
+        html.push_str("                    order: [[3, 'desc']],\n");
+        html.push_str("                    lengthMenu: [[25, 50, 100, 500, -1], [25, 50, 100, 500, 'All']],\n");
+        html.push_str("                    columnDefs: [\n");
+        html.push_str("                        { width: '30%', targets: 0 },\n");
+        html.push_str("                        { width: '25%', targets: 1 },\n");
+        html.push_str("                        { width: '15%', targets: 2 },\n");
+        html.push_str("                        { width: '12%', targets: 3 },\n");
+        html.push_str("                        { width: '12%', targets: 4 },\n");
+        html.push_str("                        { width: '10%', targets: 5 }\n");
+        html.push_str("                    ],\n");
+        html.push_str("                    language: {\n");
+        html.push_str("                        search: 'Search jobs:',\n");
+        html.push_str("                        lengthMenu: 'Show _MENU_ jobs per page',\n");
+        html.push_str("                        info: 'Showing _START_ to _END_ of _TOTAL_ jobs',\n");
+        html.push_str("                        infoFiltered: '(filtered from _MAX_ total jobs)'\n");
+        html.push_str("                    }\n");
+        html.push_str("                });\n");
+        html.push_str("            }).fail(function() {\n");
+        html.push_str("                $('#loadingMessage p').text('❌ Error loading wave data. Please refresh the page.');\n");
+        html.push_str("            });\n");
+        html.push_str("        }\n");
+        html.push_str("        \n");
+        html.push_str("        $(document).ready(function() {\n");
         html.push_str("            // Wave filter functionality\n");
         html.push_str("            $('#waveFilter').on('change', function() {\n");
-        html.push_str("                var selectedWave = this.value;\n");
-        html.push_str("                if (selectedWave === '') {\n");
-        html.push_str("                    table.column(2).search('').draw();\n");
-        html.push_str("                } else {\n");
-        html.push_str("                    table.column(2).search('Wave ' + selectedWave, true, false).draw();\n");
+        html.push_str("                var selectedWave = parseInt(this.value);\n");
+        html.push_str("                if (selectedWave && selectedWave !== currentWave) {\n");
+        html.push_str("                    currentWave = selectedWave;\n");
+        html.push_str("                    loadWaveData(selectedWave);\n");
         html.push_str("                }\n");
         html.push_str("            });\n");
         html.push_str("            \n");
-        html.push_str("            // Set Wave 1 as default filter on page load\n");
-        html.push_str("            table.column(2).search('Wave 1', true, false).draw();\n");
+        html.push_str("            // Load Wave 1 by default\n");
+        html.push_str("            loadWaveData(1);\n");
         html.push_str("        });\n");
         html.push_str("    </script>\n");
         
