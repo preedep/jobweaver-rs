@@ -111,6 +111,79 @@ impl HtmlGenerator {
         html.push_str("            </div>\n");
         html.push_str("        </div>\n");
 
+        // Complexity Scoring Methodology
+        html.push_str("        <div class=\"methodology\">\n");
+        html.push_str("            <h2>📐 Complexity Scoring Methodology</h2>\n");
+        html.push_str("            <p class=\"methodology-intro\">The complexity score is calculated based on multiple factors that affect migration difficulty:</p>\n");
+        html.push_str("            <div class=\"scoring-grid\">\n");
+        html.push_str("                <div class=\"scoring-item\">\n");
+        html.push_str("                    <div class=\"scoring-icon\">🔗</div>\n");
+        html.push_str("                    <div class=\"scoring-title\">Dependencies</div>\n");
+        html.push_str("                    <div class=\"scoring-value\">3 points each</div>\n");
+        html.push_str("                    <div class=\"scoring-desc\">In-conditions and control resources</div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("                <div class=\"scoring-item\">\n");
+        html.push_str("                    <div class=\"scoring-icon\">📊</div>\n");
+        html.push_str("                    <div class=\"scoring-title\">Dependency Depth</div>\n");
+        html.push_str("                    <div class=\"scoring-value\">5 points per level</div>\n");
+        html.push_str("                    <div class=\"scoring-desc\">Depth of dependency chain</div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("                <div class=\"scoring-item\">\n");
+        html.push_str("                    <div class=\"scoring-icon\">🎯</div>\n");
+        html.push_str("                    <div class=\"scoring-title\">Conditions</div>\n");
+        html.push_str("                    <div class=\"scoring-value\">2 points each</div>\n");
+        html.push_str("                    <div class=\"scoring-desc\">In/out conditions</div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("                <div class=\"scoring-item\">\n");
+        html.push_str("                    <div class=\"scoring-icon\">📝</div>\n");
+        html.push_str("                    <div class=\"scoring-title\">Variables</div>\n");
+        html.push_str("                    <div class=\"scoring-value\">1 point each</div>\n");
+        html.push_str("                    <div class=\"scoring-desc\">Job variables and auto-edits</div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("                <div class=\"scoring-item\">\n");
+        html.push_str("                    <div class=\"scoring-icon\">⚙️</div>\n");
+        html.push_str("                    <div class=\"scoring-title\">ON Conditions</div>\n");
+        html.push_str("                    <div class=\"scoring-value\">4+ points each</div>\n");
+        html.push_str("                    <div class=\"scoring-desc\">Conditional logic complexity</div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("                <div class=\"scoring-item\">\n");
+        html.push_str("                    <div class=\"scoring-icon\">🔄</div>\n");
+        html.push_str("                    <div class=\"scoring-title\">Cyclic Jobs</div>\n");
+        html.push_str("                    <div class=\"scoring-value\">15 points</div>\n");
+        html.push_str("                    <div class=\"scoring-desc\">Jobs with cyclic execution</div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("                <div class=\"scoring-item\">\n");
+        html.push_str("                    <div class=\"scoring-icon\">💾</div>\n");
+        html.push_str("                    <div class=\"scoring-title\">Resources</div>\n");
+        html.push_str("                    <div class=\"scoring-value\">3 points each</div>\n");
+        html.push_str("                    <div class=\"scoring-desc\">Quantitative and control resources</div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("                <div class=\"scoring-item\">\n");
+        html.push_str("                    <div class=\"scoring-icon\">📅</div>\n");
+        html.push_str("                    <div class=\"scoring-title\">Scheduling</div>\n");
+        html.push_str("                    <div class=\"scoring-value\">2 points per feature</div>\n");
+        html.push_str("                    <div class=\"scoring-desc\">Calendars, time windows, etc.</div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("            </div>\n");
+        html.push_str("            <div class=\"difficulty-legend\">\n");
+        html.push_str("                <h3>Migration Difficulty Levels:</h3>\n");
+        html.push_str("                <div class=\"legend-items\">\n");
+        html.push_str("                    <div class=\"legend-item\">\n");
+        html.push_str("                        <span class=\"legend-badge easy\">Easy</span>\n");
+        html.push_str("                        <span class=\"legend-text\">0-30 points: Simple jobs with minimal dependencies</span>\n");
+        html.push_str("                    </div>\n");
+        html.push_str("                    <div class=\"legend-item\">\n");
+        html.push_str("                        <span class=\"legend-badge medium\">Medium</span>\n");
+        html.push_str("                        <span class=\"legend-text\">31-60 points: Moderate complexity with some dependencies</span>\n");
+        html.push_str("                    </div>\n");
+        html.push_str("                    <div class=\"legend-item\">\n");
+        html.push_str("                        <span class=\"legend-badge hard\">Hard</span>\n");
+        html.push_str("                        <span class=\"legend-text\">61+ points: Complex jobs requiring careful planning</span>\n");
+        html.push_str("                    </div>\n");
+        html.push_str("                </div>\n");
+        html.push_str("            </div>\n");
+        html.push_str("        </div>\n");
+        
         html.push_str("        <div class=\"jobs\">\n");
         html.push_str("            <h2>📋 Job Details</h2>\n");
         html.push_str("            <p class=\"table-info\">Interactive table with search, sort, and pagination. Showing all jobs.</p>\n");
@@ -164,6 +237,17 @@ impl HtmlGenerator {
         html.push_str("                pageLength: 50,\n");
         html.push_str("                order: [[3, 'desc']],\n");
         html.push_str("                lengthMenu: [[25, 50, 100, 500, -1], [25, 50, 100, 500, 'All']],\n");
+        html.push_str("                columnDefs: [\n");
+        html.push_str("                    { width: '25%', targets: 0 },  // Job Name\n");
+        html.push_str("                    { width: '15%', targets: 1 },  // Folder\n");
+        html.push_str("                    { width: '10%', targets: 2 },  // Wave\n");
+        html.push_str("                    { width: '10%', targets: 3 },  // Complexity\n");
+        html.push_str("                    { width: '10%', targets: 4 },  // Difficulty\n");
+        html.push_str("                    { width: '8%', targets: 5 },   // Priority\n");
+        html.push_str("                    { width: '8%', targets: 6 },   // Critical\n");
+        html.push_str("                    { width: '8%', targets: 7 },   // Dependencies\n");
+        html.push_str("                    { width: '8%', targets: 8 }    // Effort\n");
+        html.push_str("                ],\n");
         html.push_str("                language: {\n");
         html.push_str("                    search: 'Search jobs:',\n");
         html.push_str("                    lengthMenu: 'Show _MENU_ jobs per page',\n");
@@ -332,6 +416,89 @@ impl HtmlGenerator {
             font-style: italic;
         }
         
+        /* Methodology Section */
+        .methodology {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 40px 0;
+        }
+        .methodology-intro {
+            color: #7f8c8d;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+        }
+        .scoring-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .scoring-item {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .scoring-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .scoring-icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        .scoring-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+        .scoring-value {
+            color: #3498db;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 8px;
+        }
+        .scoring-desc {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        .difficulty-legend {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        .difficulty-legend h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+        .legend-items {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .legend-badge {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            min-width: 80px;
+            text-align: center;
+        }
+        .legend-text {
+            color: #555;
+            font-size: 1em;
+        }
+        
         /* Table Styles */
         .jobs {
             margin: 40px 0;
@@ -343,6 +510,11 @@ impl HtmlGenerator {
         }
         table.display {
             width: 100% !important;
+        }
+        table.display th:nth-child(3),
+        table.display td:nth-child(3) {
+            min-width: 100px;
+            text-align: center;
         }
         .easy {
             color: #27ae60;
