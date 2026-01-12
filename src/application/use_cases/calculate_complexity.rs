@@ -24,6 +24,7 @@ impl CalculateComplexity {
             complexity_score,
             migration_difficulty,
             migration_priority,
+            migration_wave: 0, // Will be set by wave determination
             dependency_count: job.dependency_count(),
             is_critical: job.is_critical(),
             is_cyclic: job.cyclic,
@@ -48,6 +49,7 @@ pub struct JobComplexityResult {
     pub complexity_score: ComplexityScore,
     pub migration_difficulty: MigrationDifficulty,
     pub migration_priority: MigrationPriority,
+    pub migration_wave: usize,
     pub dependency_count: usize,
     pub is_critical: bool,
     pub is_cyclic: bool,

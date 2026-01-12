@@ -22,12 +22,21 @@ impl AnalyzeJobs {
             .flat_map(|f| f.all_jobs())
             .collect();
 
-        let complexity_results = self.calculate_complexity.execute_batch(&all_jobs);
+        let mut complexity_results = self.calculate_complexity.execute_batch(&all_jobs);
 
         let mut build_graph = BuildDependencyGraph::new();
         let graph_result = build_graph.execute(&all_jobs);
 
         let migration_waves = self.determine_waves.execute(&complexity_results);
+
+        // Update each job with its wave number
+        for wave in &migration_waves {
+            for job_name in &wave.jobs {
+                if let Some(result) = complexity_results.iter_mut().find(|r| &r.job_name == job_name) {
+                    result.migration_wave = wave.wave;
+                }
+            }
+        }
 
         let total_jobs = all_jobs.len();
         let total_folders = folders.len();

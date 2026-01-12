@@ -6,14 +6,14 @@ use crate::application::use_cases::{
     determine_migration_waves::MigrationWave,
 };
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisOutput {
     pub summary: SummaryOutput,
     pub jobs: Vec<JobOutput>,
     pub migration_waves: Vec<WaveOutput>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SummaryOutput {
     pub total_jobs: usize,
     pub total_folders: usize,
@@ -22,35 +22,41 @@ pub struct SummaryOutput {
     pub has_circular_dependencies: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobOutput {
     pub job_name: String,
     pub folder: String,
+    pub folder_name: String,
     pub complexity_score: u32,
     pub migration_difficulty: String,
     pub migration_priority: u32,
+    pub migration_wave: usize,
+    pub is_critical: bool,
+    pub dependency_count: usize,
+    pub estimated_effort_hours: u32,
     pub metrics: MetricsOutput,
     pub risks: Vec<String>,
     pub airflow_mapping: AirflowMappingOutput,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsOutput {
     pub dependency_count: usize,
     pub is_critical: bool,
     pub is_cyclic: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AirflowMappingOutput {
     pub suggested_dag_name: String,
     pub operator_type: String,
     pub estimated_effort_hours: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WaveOutput {
     pub wave: usize,
+    pub wave_number: usize,
     pub jobs: Vec<String>,
     pub reason: String,
 }
@@ -97,11 +103,16 @@ impl JobOutput {
         };
 
         Self {
-            job_name: result.job_name,
-            folder: result.folder_name,
+            job_name: result.job_name.clone(),
+            folder: result.folder_name.clone(),
+            folder_name: result.folder_name,
             complexity_score: result.complexity_score.value(),
             migration_difficulty: result.migration_difficulty.to_string(),
             migration_priority: result.migration_priority.value(),
+            migration_wave: result.migration_wave,
+            is_critical: result.is_critical,
+            dependency_count: result.dependency_count,
+            estimated_effort_hours: result.migration_difficulty.estimated_effort_hours(),
             metrics: MetricsOutput {
                 dependency_count: result.dependency_count,
                 is_critical: result.is_critical,
@@ -147,6 +158,7 @@ impl WaveOutput {
     fn from_migration_wave(wave: MigrationWave) -> Self {
         Self {
             wave: wave.wave,
+            wave_number: wave.wave,
             jobs: wave.jobs,
             reason: wave.reason,
         }
