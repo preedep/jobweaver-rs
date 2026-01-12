@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use crate::application::use_cases::calculate_complexity::JobComplexityResult;
-use crate::domain::value_objects::MigrationDifficulty;
 
 pub struct DetermineMigrationWaves;
 
@@ -34,30 +33,60 @@ impl DetermineMigrationWaves {
     }
 
     fn determine_wave(&self, result: &JobComplexityResult) -> usize {
-        match result.migration_difficulty {
-            MigrationDifficulty::Easy => {
-                if result.dependency_count == 0 {
-                    1
-                } else if result.dependency_count <= 2 {
-                    2
+        let score = result.complexity_score.value();
+        let deps = result.dependency_count;
+        
+        // Wave assignment strategy:
+        // Wave 1-2: Low complexity + minimal/no dependencies (quick wins)
+        // Wave 3+: Higher complexity or more dependencies
+        
+        match score {
+            0..=15 => {
+                // Very low complexity
+                if deps == 0 {
+                    1  // Perfect quick win
+                } else if deps <= 1 {
+                    1  // Still very simple
                 } else {
-                    3
+                    2  // Low complexity but has dependencies
                 }
             }
-            MigrationDifficulty::Medium => {
-                if result.is_critical {
-                    2
-                } else if result.dependency_count <= 3 {
-                    3
+            16..=30 => {
+                // Low complexity (Easy)
+                if deps == 0 {
+                    1  // Easy job, no dependencies
+                } else if deps <= 1 {
+                    2  // Easy job, minimal dependencies
                 } else {
-                    4
+                    3  // Easy job but too many dependencies
                 }
             }
-            MigrationDifficulty::Hard => {
-                if result.is_critical {
-                    3
+            31..=45 => {
+                // Medium-low complexity
+                if deps == 0 {
+                    2  // Medium complexity but independent
+                } else if deps <= 1 {
+                    3  // Medium complexity, minimal dependencies
                 } else {
-                    5
+                    3  // Medium complexity with dependencies
+                }
+            }
+            46..=60 => {
+                // Medium-high complexity
+                if result.is_critical {
+                    3  // Critical jobs get priority
+                } else if deps <= 2 {
+                    3  // Medium-high, manageable dependencies
+                } else {
+                    4  // Medium-high with many dependencies
+                }
+            }
+            _ => {
+                // High complexity (Hard)
+                if result.is_critical {
+                    4  // Critical hard jobs
+                } else {
+                    5  // Non-critical hard jobs - last wave
                 }
             }
         }
@@ -91,7 +120,7 @@ pub struct MigrationWave {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::value_objects::{ComplexityScore, MigrationPriority};
+    use crate::domain::value_objects::{ComplexityScore, MigrationDifficulty, MigrationPriority};
 
     #[test]
     fn test_determine_wave_easy_no_deps() {
