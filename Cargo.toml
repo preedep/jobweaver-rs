@@ -50,3 +50,9 @@ path = "src/lib.rs"
 [[bin]]
 name = "jobweaver"
 path = "src/main.rs"
+
+[profile.dev]
+overflow-checks = false
+
+[profile.release]
+overflow-checks = false
