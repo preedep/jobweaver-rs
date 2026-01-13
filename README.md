@@ -20,6 +20,7 @@ Built with Rust using Clean Architecture principles.
 - 🔍 **Dependency Analysis**: Builds dependency graphs and detects circular dependencies
 - 📄 **Multiple Output Formats**: Generates reports in JSON, CSV, HTML, and Markdown
 - 💾 **SQLite Export**: Export raw Control-M data to SQLite database for custom queries and analysis
+- 🌐 **Web Server**: Enterprise-grade web interface for interactive job exploration with authentication, search, and dashboard
 - 🏗️ **Clean Architecture**: Built with domain-driven design principles
 - ✅ **Comprehensive Testing**: Unit tests for all core components
 
@@ -136,6 +137,41 @@ sqlite3 controlm.db "SELECT job_name, folder_name FROM jobs WHERE critical = 1;"
 See [SQLite Schema Documentation](docs/SQLITE_SCHEMA.md) for detailed table structure and query examples.
 
 See [Performance Documentation](docs/PERFORMANCE.md) for optimization details and benchmarks.
+
+#### Web Server Command
+
+Start an interactive web server to explore jobs through a modern web interface.
+
+```bash
+jobweaver serve -d controlm.db
+```
+
+**Options:**
+```
+  -d, --database <FILE>   SQLite database file [default: controlm.db]
+  -p, --port <PORT>       Port to listen on [default: 8080]
+      --host <HOST>       Host to bind to [default: 127.0.0.1]
+  -v, --verbose           Enable verbose logging
+```
+
+**Features:**
+- 🔐 Authentication (Local & Entra ID)
+- 🔍 Advanced search with multiple filters
+- 📊 Interactive dashboard with statistics
+- 📋 Enterprise-grade sortable table
+- 🎯 Drill-down job details
+- 📱 Responsive design
+
+**Example:**
+```bash
+# Start web server
+jobweaver serve -d controlm.db -p 8080
+
+# Open browser to http://localhost:8080
+# Default login: admin / admin
+```
+
+See [Web Server Documentation](docs/WEB_SERVER.md) for complete guide and API reference.
 
 ### Output Formats
 
