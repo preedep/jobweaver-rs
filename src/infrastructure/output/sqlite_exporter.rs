@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, params, Transaction};
 use std::path::Path;
 use crate::domain::entities::*;
 
@@ -8,6 +8,7 @@ pub type ProgressCallback = Box<dyn Fn(&str)>;
 pub struct SqliteExporter {
     conn: Connection,
     progress_callback: Option<ProgressCallback>,
+    job_counter: std::cell::Cell<usize>,
 }
 
 impl SqliteExporter {
@@ -15,9 +16,20 @@ impl SqliteExporter {
         let conn = Connection::open(db_path)
             .context("Failed to open SQLite database")?;
         
+        // Optimize SQLite for bulk inserts
+        conn.execute_batch(
+            r#"
+            PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = NORMAL;
+            PRAGMA cache_size = 10000;
+            PRAGMA temp_store = MEMORY;
+            "#
+        )?;
+        
         let exporter = Self { 
             conn,
             progress_callback: None,
+            job_counter: std::cell::Cell::new(0),
         };
         exporter.create_schema()?;
         
@@ -35,6 +47,14 @@ impl SqliteExporter {
     fn report_progress(&self, message: &str) {
         if let Some(callback) = &self.progress_callback {
             callback(message);
+        }
+    }
+
+    fn report_progress_throttled(&self, message: &str, force: bool) {
+        let count = self.job_counter.get();
+        // Report every 10 jobs or when forced
+        if force || count % 10 == 0 {
+            self.report_progress(message);
         }
     }
 
@@ -198,17 +218,23 @@ impl SqliteExporter {
     pub fn export_folders(&self, folders: &[Folder]) -> Result<()> {
         self.report_progress("Starting export...");
         
+        // Use transaction for all exports
+        let tx = self.conn.unchecked_transaction()?;
+        
         for (idx, folder) in folders.iter().enumerate() {
-            self.report_progress(&format!("Exporting folder {}/{}: {}", 
+            self.report_progress(&format!("📁 Exporting folder {}/{}: {}", 
                 idx + 1, folders.len(), folder.folder_name));
-            self.export_folder(folder)?;
+            self.export_folder_tx(&tx, folder)?;
         }
+        
+        self.report_progress("💾 Committing to database...");
+        tx.commit()?;
         
         self.report_progress("Export completed!");
         Ok(())
     }
 
-    fn export_folder(&self, folder: &Folder) -> Result<()> {
+    fn export_folder_tx(&self, tx: &Transaction, folder: &Folder) -> Result<()> {
         let folder_type_str = match folder.folder_type {
             FolderType::Simple => "Simple",
             FolderType::Smart => "Smart",
@@ -216,7 +242,7 @@ impl SqliteExporter {
             FolderType::SmartTable => "SmartTable",
         };
 
-        self.conn.execute(
+        tx.execute(
             r#"
             INSERT OR REPLACE INTO folders 
             (folder_name, folder_type, datacenter, application, description, owner)
@@ -233,20 +259,24 @@ impl SqliteExporter {
         ).context("Failed to insert folder")?;
 
         for job in &folder.jobs {
-            self.export_job(job)?;
+            self.export_job_tx(tx, job)?;
         }
 
         for sub_folder in &folder.sub_folders {
-            self.export_folder(sub_folder)?;
+            self.export_folder_tx(tx, sub_folder)?;
         }
 
         Ok(())
     }
 
-    fn export_job(&self, job: &Job) -> Result<()> {
-        self.report_progress(&format!("  → Job: {}", job.job_name));
+    fn export_job_tx(&self, tx: &Transaction, job: &Job) -> Result<()> {
+        let count = self.job_counter.get() + 1;
+        self.job_counter.set(count);
         
-        self.conn.execute(
+        // Throttled progress reporting (every 10 jobs)
+        self.report_progress_throttled(&format!("Job: {}", job.job_name), false);
+        
+        tx.execute(
             r#"
             INSERT OR REPLACE INTO jobs 
             (job_name, folder_name, application, sub_application, description, 
@@ -275,23 +305,23 @@ impl SqliteExporter {
             ],
         ).context("Failed to insert job")?;
 
-        let job_id = self.conn.last_insert_rowid();
+        let job_id = tx.last_insert_rowid();
 
-        self.export_job_scheduling(job_id, &job.scheduling)?;
-        self.export_in_conditions(job_id, &job.in_conditions)?;
-        self.export_out_conditions(job_id, &job.out_conditions)?;
-        self.export_on_conditions(job_id, &job.on_conditions)?;
-        self.export_control_resources(job_id, &job.control_resources)?;
-        self.export_quantitative_resources(job_id, &job.quantitative_resources)?;
-        self.export_variables(job_id, &job.variables)?;
-        self.export_auto_edits(job_id, &job.auto_edits)?;
-        self.export_metadata(job_id, &job.metadata)?;
+        self.export_job_scheduling_tx(tx, job_id, &job.scheduling)?;
+        self.export_in_conditions_tx(tx, job_id, &job.in_conditions)?;
+        self.export_out_conditions_tx(tx, job_id, &job.out_conditions)?;
+        self.export_on_conditions_tx(tx, job_id, &job.on_conditions)?;
+        self.export_control_resources_tx(tx, job_id, &job.control_resources)?;
+        self.export_quantitative_resources_tx(tx, job_id, &job.quantitative_resources)?;
+        self.export_variables_tx(tx, job_id, &job.variables)?;
+        self.export_auto_edits_tx(tx, job_id, &job.auto_edits)?;
+        self.export_metadata_tx(tx, job_id, &job.metadata)?;
 
         Ok(())
     }
 
-    fn export_job_scheduling(&self, job_id: i64, scheduling: &SchedulingInfo) -> Result<()> {
-        self.conn.execute(
+    fn export_job_scheduling_tx(&self, tx: &Transaction, job_id: i64, scheduling: &SchedulingInfo) -> Result<()> {
+        tx.execute(
             r#"
             INSERT INTO job_scheduling 
             (job_id, time_from, time_to, days_calendar, weeks_calendar, conf_calendar)
@@ -310,73 +340,78 @@ impl SqliteExporter {
         Ok(())
     }
 
-    fn export_in_conditions(&self, job_id: i64, conditions: &[Condition]) -> Result<()> {
+    fn export_in_conditions_tx(&self, tx: &Transaction, job_id: i64, conditions: &[Condition]) -> Result<()> {
+        if conditions.is_empty() {
+            return Ok(());
+        }
+
+        // Use prepared statement for better performance
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO in_conditions (job_id, condition_name, odate, and_or) VALUES (?1, ?2, ?3, ?4)"
+        )?;
+
         for condition in conditions {
             if matches!(condition.condition_type, ConditionType::In) {
-                self.conn.execute(
-                    r#"
-                    INSERT INTO in_conditions 
-                    (job_id, condition_name, odate, and_or)
-                    VALUES (?1, ?2, ?3, ?4)
-                    "#,
-                    params![
-                        job_id,
-                        &condition.name,
-                        &condition.odate,
-                        &condition.and_or,
-                    ],
-                ).context("Failed to insert in condition")?;
+                stmt.execute(params![
+                    job_id,
+                    &condition.name,
+                    &condition.odate,
+                    &condition.and_or,
+                ]).context("Failed to insert in condition")?;
             }
         }
         Ok(())
     }
 
-    fn export_out_conditions(&self, job_id: i64, conditions: &[Condition]) -> Result<()> {
+    fn export_out_conditions_tx(&self, tx: &Transaction, job_id: i64, conditions: &[Condition]) -> Result<()> {
+        if conditions.is_empty() {
+            return Ok(());
+        }
+
+        // Use prepared statement for better performance
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO out_conditions (job_id, condition_name, odate) VALUES (?1, ?2, ?3)"
+        )?;
+
         for condition in conditions {
             if matches!(condition.condition_type, ConditionType::Out) {
-                self.conn.execute(
-                    r#"
-                    INSERT INTO out_conditions 
-                    (job_id, condition_name, odate)
-                    VALUES (?1, ?2, ?3)
-                    "#,
-                    params![
-                        job_id,
-                        &condition.name,
-                        &condition.odate,
-                    ],
-                ).context("Failed to insert out condition")?;
+                stmt.execute(params![
+                    job_id,
+                    &condition.name,
+                    &condition.odate,
+                ]).context("Failed to insert out condition")?;
             }
         }
         Ok(())
     }
 
-    fn export_on_conditions(&self, job_id: i64, on_conditions: &[OnCondition]) -> Result<()> {
-        for on_cond in on_conditions {
-            self.conn.execute(
-                r#"
-                INSERT INTO on_conditions 
-                (job_id, stmt, code, pattern)
-                VALUES (?1, ?2, ?3, ?4)
-                "#,
-                params![
-                    job_id,
-                    &on_cond.stmt,
-                    &on_cond.code,
-                    &on_cond.pattern,
-                ],
-            ).context("Failed to insert on condition")?;
+    fn export_on_conditions_tx(&self, tx: &Transaction, job_id: i64, on_conditions: &[OnCondition]) -> Result<()> {
+        if on_conditions.is_empty() {
+            return Ok(());
+        }
 
-            let on_condition_id = self.conn.last_insert_rowid();
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO on_conditions (job_id, stmt, code, pattern) VALUES (?1, ?2, ?3, ?4)"
+        )?;
+
+        for on_cond in on_conditions {
+            stmt.execute(params![
+                job_id,
+                &on_cond.stmt,
+                &on_cond.code,
+                &on_cond.pattern,
+            ]).context("Failed to insert on condition")?;
+
+            let on_condition_id = tx.last_insert_rowid();
 
             for action in &on_cond.actions {
-                self.export_do_action(on_condition_id, action)?;
+                self.export_do_action_tx(tx, on_condition_id, action)?;
             }
         }
         Ok(())
     }
 
-    fn export_do_action(&self, on_condition_id: i64, action: &DoAction) -> Result<()> {
+    fn export_do_action_tx(&self, tx: &Transaction, on_condition_id: i64, action: &DoAction) -> Result<()> {
         let (action_type, action_value, additional_data) = match action {
             DoAction::Action(val) => ("Action", val.clone(), None),
             DoAction::Condition { name, sign } => {
@@ -396,7 +431,7 @@ impl SqliteExporter {
             }
         };
 
-        self.conn.execute(
+        tx.execute(
             r#"
             INSERT INTO do_actions 
             (on_condition_id, action_type, action_value, additional_data)
@@ -413,83 +448,91 @@ impl SqliteExporter {
         Ok(())
     }
 
-    fn export_control_resources(&self, job_id: i64, resources: &[ControlResource]) -> Result<()> {
+    fn export_control_resources_tx(&self, tx: &Transaction, job_id: i64, resources: &[ControlResource]) -> Result<()> {
+        if resources.is_empty() {
+            return Ok(());
+        }
+
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO control_resources (job_id, resource_name, resource_type, on_fail) VALUES (?1, ?2, ?3, ?4)"
+        )?;
+
         for resource in resources {
-            self.conn.execute(
-                r#"
-                INSERT INTO control_resources 
-                (job_id, resource_name, resource_type, on_fail)
-                VALUES (?1, ?2, ?3, ?4)
-                "#,
-                params![
-                    job_id,
-                    &resource.name,
-                    &resource.resource_type,
-                    &resource.on_fail,
-                ],
-            ).context("Failed to insert control resource")?;
+            stmt.execute(params![
+                job_id,
+                &resource.name,
+                &resource.resource_type,
+                &resource.on_fail,
+            ]).context("Failed to insert control resource")?;
         }
         Ok(())
     }
 
-    fn export_quantitative_resources(&self, job_id: i64, resources: &[QuantitativeResource]) -> Result<()> {
+    fn export_quantitative_resources_tx(&self, tx: &Transaction, job_id: i64, resources: &[QuantitativeResource]) -> Result<()> {
+        if resources.is_empty() {
+            return Ok(());
+        }
+
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO quantitative_resources (job_id, resource_name, quantity, on_fail, on_ok) VALUES (?1, ?2, ?3, ?4, ?5)"
+        )?;
+
         for resource in resources {
-            self.conn.execute(
-                r#"
-                INSERT INTO quantitative_resources 
-                (job_id, resource_name, quantity, on_fail, on_ok)
-                VALUES (?1, ?2, ?3, ?4, ?5)
-                "#,
-                params![
-                    job_id,
-                    &resource.name,
-                    resource.quantity,
-                    &resource.on_fail,
-                    &resource.on_ok,
-                ],
-            ).context("Failed to insert quantitative resource")?;
+            stmt.execute(params![
+                job_id,
+                &resource.name,
+                resource.quantity,
+                &resource.on_fail,
+                &resource.on_ok,
+            ]).context("Failed to insert quantitative resource")?;
         }
         Ok(())
     }
 
-    fn export_variables(&self, job_id: i64, variables: &std::collections::HashMap<String, String>) -> Result<()> {
+    fn export_variables_tx(&self, tx: &Transaction, job_id: i64, variables: &std::collections::HashMap<String, String>) -> Result<()> {
+        if variables.is_empty() {
+            return Ok(());
+        }
+
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO job_variables (job_id, variable_name, variable_value) VALUES (?1, ?2, ?3)"
+        )?;
+
         for (name, value) in variables {
-            self.conn.execute(
-                r#"
-                INSERT INTO job_variables 
-                (job_id, variable_name, variable_value)
-                VALUES (?1, ?2, ?3)
-                "#,
-                params![job_id, name, value],
-            ).context("Failed to insert job variable")?;
+            stmt.execute(params![job_id, name, value])
+                .context("Failed to insert job variable")?;
         }
         Ok(())
     }
 
-    fn export_auto_edits(&self, job_id: i64, auto_edits: &std::collections::HashMap<String, String>) -> Result<()> {
+    fn export_auto_edits_tx(&self, tx: &Transaction, job_id: i64, auto_edits: &std::collections::HashMap<String, String>) -> Result<()> {
+        if auto_edits.is_empty() {
+            return Ok(());
+        }
+
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO job_auto_edits (job_id, edit_name, edit_value) VALUES (?1, ?2, ?3)"
+        )?;
+
         for (name, value) in auto_edits {
-            self.conn.execute(
-                r#"
-                INSERT INTO job_auto_edits 
-                (job_id, edit_name, edit_value)
-                VALUES (?1, ?2, ?3)
-                "#,
-                params![job_id, name, value],
-            ).context("Failed to insert auto edit")?;
+            stmt.execute(params![job_id, name, value])
+                .context("Failed to insert auto edit")?;
         }
         Ok(())
     }
 
-    fn export_metadata(&self, job_id: i64, metadata: &std::collections::HashMap<String, String>) -> Result<()> {
+    fn export_metadata_tx(&self, tx: &Transaction, job_id: i64, metadata: &std::collections::HashMap<String, String>) -> Result<()> {
+        if metadata.is_empty() {
+            return Ok(());
+        }
+
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO job_metadata (job_id, meta_key, meta_value) VALUES (?1, ?2, ?3)"
+        )?;
+
         for (key, value) in metadata {
-            self.conn.execute(
-                r#"
-                INSERT INTO job_metadata 
-                (job_id, meta_key, meta_value)
-                VALUES (?1, ?2, ?3)
-                "#,
-                params![job_id, key, value],
-            ).context("Failed to insert metadata")?;
+            stmt.execute(params![job_id, key, value])
+                .context("Failed to insert metadata")?;
         }
         Ok(())
     }
