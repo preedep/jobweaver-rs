@@ -19,6 +19,7 @@ Built with Rust using Clean Architecture principles.
 - 📈 **Migration Wave Planning**: Groups jobs into migration waves based on complexity and dependencies
 - 🔍 **Dependency Analysis**: Builds dependency graphs and detects circular dependencies
 - 📄 **Multiple Output Formats**: Generates reports in JSON, CSV, HTML, and Markdown
+- 💾 **SQLite Export**: Export raw Control-M data to SQLite database for custom queries and analysis
 - 🏗️ **Clean Architecture**: Built with domain-driven design principles
 - ✅ **Comprehensive Testing**: Unit tests for all core components
 
@@ -63,40 +64,74 @@ The binary will be available at `target/release/jobweaver`
 
 ### Usage
 
-#### Basic Usage
+JobWeaver supports two main commands: `analyze` for generating migration reports and `export-sqlite` for exporting raw data to SQLite.
+
+#### Analyze Command
+
+Generate migration analysis reports in various formats.
 
 ```bash
-jobweaver -i datasource/export_xml_260109.xml -o output
+jobweaver analyze -i datasource/export_xml_260109.xml -o output
 ```
 
-#### Options
-
+**Options:**
 ```
-Options:
   -i, --input <FILE>      Path to Control-M XML export file
   -o, --output <DIR>      Output directory for reports [default: output]
   -f, --format <FORMAT>   Output format: json, csv, html, markdown, all [default: all]
   -v, --verbose           Enable verbose logging
-  -h, --help              Print help
-  -V, --version           Print version
 ```
 
-#### Examples
+**Examples:**
 
 Generate all report formats:
 ```bash
-jobweaver -i input.xml -o reports
+jobweaver analyze -i input.xml -o reports
 ```
 
 Generate only JSON report:
 ```bash
-jobweaver -i input.xml -o reports -f json
+jobweaver analyze -i input.xml -o reports -f json
 ```
 
 Generate CSV report with verbose logging:
 ```bash
-jobweaver -i input.xml -o reports -f csv -v
+jobweaver analyze -i input.xml -o reports -f csv -v
 ```
+
+#### Export SQLite Command
+
+Export raw Control-M data to SQLite database for custom queries and analysis.
+
+```bash
+jobweaver export-sqlite -i input.xml -o controlm.db
+```
+
+**Options:**
+```
+  -i, --input <FILE>      Path to Control-M XML export file
+  -o, --output <FILE>     Output SQLite database file [default: controlm.db]
+  -v, --verbose           Enable verbose logging
+```
+
+**Examples:**
+
+Export to default database:
+```bash
+jobweaver export-sqlite -i input.xml
+```
+
+Export to custom database file:
+```bash
+jobweaver export-sqlite -i input.xml -o my_jobs.db
+```
+
+Query the exported database:
+```bash
+sqlite3 controlm.db "SELECT job_name, folder_name FROM jobs WHERE critical = 1;"
+```
+
+See [SQLite Schema Documentation](docs/SQLITE_SCHEMA.md) for detailed table structure and query examples.
 
 ### Output Formats
 
@@ -111,6 +146,15 @@ Interactive web-based report with styling and formatting.
 
 #### Markdown Report (`analysis.md`)
 Human-readable documentation format with tables and sections.
+
+#### SQLite Database (`controlm.db`)
+Normalized relational database containing all raw Control-M data. Perfect for:
+- Custom SQL queries and analysis
+- Integration with BI tools
+- Data exploration and reporting
+- Building custom dashboards
+
+See [SQLite Schema Documentation](docs/SQLITE_SCHEMA.md) for complete table structure and query examples.
 
 ### Complexity Scoring
 
@@ -180,6 +224,7 @@ jobweaver-rs/
 - **petgraph**: Dependency graph analysis
 - **csv**: CSV generation
 - **tera**: HTML templating
+- **rusqlite**: SQLite database operations
 - **anyhow**: Error handling
 - **tracing**: Logging
 - **encoding_rs**: Multi-encoding support
@@ -239,6 +284,7 @@ JobWeaver-RS เป็นเครื่องมือวิเคราะห�
 - 📈 **วางแผน Migration Wave**: จัดกลุ่ม Job เป็น wave ตามความซับซ้อนและ dependencies
 - 🔍 **วิเคราะห์ Dependency**: สร้าง dependency graph และตรวจจับ circular dependencies
 - 📄 **รายงานหลายรูปแบบ**: สร้างรายงานในรูปแบบ JSON, CSV, HTML และ Markdown
+- 💾 **Export ไปยัง SQLite**: Export ข้อมูล Control-M แบบ raw ไปยัง SQLite database เพื่อ query และวิเคราะห์แบบกำหนดเอง
 - 🏗️ **Clean Architecture**: พัฒนาตามหลัก Domain-Driven Design
 - ✅ **Unit Tests**: ครอบคลุมทุก component หลัก
 
@@ -283,40 +329,74 @@ cargo build --release
 
 ### วิธีใช้งาน
 
-#### การใช้งานพื้นฐาน
+JobWeaver รองรับ 2 คำสั่งหลัก: `analyze` สำหรับสร้างรายงานการวิเคราะห์ และ `export-sqlite` สำหรับ export ข้อมูล raw ไปยัง SQLite
+
+#### คำสั่ง Analyze
+
+สร้างรายงานวิเคราะห์การย้ายข้อมูลในรูปแบบต่างๆ
 
 ```bash
-jobweaver -i datasource/export_xml_260109.xml -o output
+jobweaver analyze -i datasource/export_xml_260109.xml -o output
 ```
 
-#### ตัวเลือก (Options)
-
+**ตัวเลือก:**
 ```
-Options:
   -i, --input <FILE>      ไฟล์ XML ที่ export จาก Control-M
   -o, --output <DIR>      โฟลเดอร์สำหรับเก็บรายงาน [default: output]
   -f, --format <FORMAT>   รูปแบบรายงาน: json, csv, html, markdown, all [default: all]
   -v, --verbose           แสดง log แบบละเอียด
-  -h, --help              แสดงวิธีใช้งาน
-  -V, --version           แสดงเวอร์ชัน
 ```
 
-#### ตัวอย่างการใช้งาน
+**ตัวอย่าง:**
 
 สร้างรายงานทุกรูปแบบ:
 ```bash
-jobweaver -i input.xml -o reports
+jobweaver analyze -i input.xml -o reports
 ```
 
 สร้างเฉพาะรายงาน JSON:
 ```bash
-jobweaver -i input.xml -o reports -f json
+jobweaver analyze -i input.xml -o reports -f json
 ```
 
 สร้างรายงาน CSV พร้อม verbose logging:
 ```bash
-jobweaver -i input.xml -o reports -f csv -v
+jobweaver analyze -i input.xml -o reports -f csv -v
 ```
+
+#### คำสั่ง Export SQLite
+
+Export ข้อมูล Control-M แบบ raw ไปยัง SQLite database เพื่อ query และวิเคราะห์แบบกำหนดเอง
+
+```bash
+jobweaver export-sqlite -i input.xml -o controlm.db
+```
+
+**ตัวเลือก:**
+```
+  -i, --input <FILE>      ไฟล์ XML ที่ export จาก Control-M
+  -o, --output <FILE>     ไฟล์ SQLite database [default: controlm.db]
+  -v, --verbose           แสดง log แบบละเอียด
+```
+
+**ตัวอย่าง:**
+
+Export ไปยัง database ค่าเริ่มต้น:
+```bash
+jobweaver export-sqlite -i input.xml
+```
+
+Export ไปยังไฟล์ database ที่กำหนดเอง:
+```bash
+jobweaver export-sqlite -i input.xml -o my_jobs.db
+```
+
+Query ข้อมูลจาก database ที่ export:
+```bash
+sqlite3 controlm.db "SELECT job_name, folder_name FROM jobs WHERE critical = 1;"
+```
+
+ดูรายละเอียด [เอกสาร SQLite Schema](docs/SQLITE_SCHEMA.md) สำหรับโครงสร้างตารางและตัวอย่าง query
 
 ### รูปแบบรายงาน
 
@@ -331,6 +411,15 @@ jobweaver -i input.xml -o reports -f csv -v
 
 #### Markdown Report (`analysis.md`)
 รูปแบบเอกสารที่อ่านง่าย มีตารางและหัวข้อแบ่งส่วน
+
+#### SQLite Database (`controlm.db`)
+Relational database ที่มีข้อมูล Control-M แบบ raw ทั้งหมด เหมาะสำหรับ:
+- Query และวิเคราะห์ข้อมูลด้วย SQL แบบกำหนดเอง
+- เชื่อมต่อกับเครื่องมือ BI
+- สำรวจและรายงานข้อมูล
+- สร้าง dashboard แบบกำหนดเอง
+
+ดูรายละเอียด [เอกสาร SQLite Schema](docs/SQLITE_SCHEMA.md) สำหรับโครงสร้างตารางและตัวอย่าง query
 
 ### การคำนวณคะแนนความซับซ้อน
 
@@ -400,6 +489,7 @@ jobweaver-rs/
 - **petgraph**: Dependency graph analysis
 - **csv**: CSV generation
 - **tera**: HTML templating
+- **rusqlite**: การทำงานกับ SQLite database
 - **anyhow**: Error handling
 - **tracing**: Logging
 - **encoding_rs**: รองรับ encoding หลายแบบ

@@ -2,8 +2,8 @@ use clap::Parser;
 use tracing_subscriber::{EnvFilter, fmt};
 use anyhow::Result;
 
-use jobweaver::presentation::cli::Cli;
-use jobweaver::presentation::cli::commands::AnalyzeCommand;
+use jobweaver::presentation::cli::{Cli, Commands};
+use jobweaver::presentation::cli::commands::{AnalyzeCommand, ExportSqliteCommand};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -19,14 +19,21 @@ fn main() -> Result<()> {
         .with_target(false)
         .init();
 
-    AnalyzeCommand::execute(
-        &cli.input,
-        &cli.output,
-        cli.should_generate_json(),
-        cli.should_generate_csv(),
-        cli.should_generate_html(),
-        cli.should_generate_markdown(),
-    )?;
+    match &cli.command {
+        Commands::Analyze { input, output, format } => {
+            AnalyzeCommand::execute(
+                input,
+                output,
+                format.should_generate_json(),
+                format.should_generate_csv(),
+                format.should_generate_html(),
+                format.should_generate_markdown(),
+            )?;
+        }
+        Commands::ExportSqlite { input, output } => {
+            ExportSqliteCommand::execute(input, output)?;
+        }
+    }
 
     Ok(())
 }

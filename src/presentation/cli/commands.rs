@@ -4,7 +4,7 @@ use std::path::Path;
 use tracing::{info, warn};
 
 use crate::infrastructure::parsers::ControlMXmlParser;
-use crate::infrastructure::output::{JsonGenerator, CsvGenerator, HtmlGenerator, MarkdownGenerator};
+use crate::infrastructure::output::{JsonGenerator, CsvGenerator, HtmlGenerator, MarkdownGenerator, SqliteExporter};
 use crate::application::use_cases::AnalyzeJobs;
 use crate::presentation::dto::AnalysisOutput;
 
@@ -204,6 +204,66 @@ impl AnalyzeCommand {
         
         // Print detailed summary
         Self::print_summary(&output);
+        
+        Ok(())
+    }
+}
+
+pub struct ExportSqliteCommand;
+
+impl ExportSqliteCommand {
+    pub fn execute<P: AsRef<Path>>(
+        input_path: P,
+        output_db_path: P,
+    ) -> Result<()> {
+        info!("Starting Control-M XML to SQLite export...");
+        
+        let parser = ControlMXmlParser::new();
+        info!("Parsing XML file: {:?}", input_path.as_ref());
+        let folders = parser.parse_file(&input_path)
+            .context("Failed to parse Control-M XML file")?;
+        
+        info!("Found {} folders", folders.len());
+        let total_jobs: usize = folders.iter().map(|f| f.total_jobs()).sum();
+        info!("Total jobs: {}", total_jobs);
+
+        if total_jobs == 0 {
+            warn!("No jobs found in the XML file");
+            return Ok(());
+        }
+
+        info!("Creating SQLite database: {:?}", output_db_path.as_ref());
+        let exporter = SqliteExporter::new(&output_db_path)
+            .context("Failed to create SQLite database")?;
+
+        info!("Exporting folders and jobs to SQLite...");
+        exporter.export_folders(&folders)
+            .context("Failed to export data to SQLite")?;
+
+        let stats = exporter.get_statistics()
+            .context("Failed to get database statistics")?;
+
+        println!("\n{}", "=".repeat(80));
+        println!("✅ SQLITE EXPORT COMPLETED");
+        println!("{}", "=".repeat(80));
+        println!("\n📊 Export Statistics:");
+        println!("  • Database file:           {:?}", output_db_path.as_ref());
+        println!("  • Folders exported:        {}", stats.folder_count);
+        println!("  • Jobs exported:           {}", stats.job_count);
+        println!("  • In conditions:           {}", stats.in_condition_count);
+        println!("  • Out conditions:          {}", stats.out_condition_count);
+        println!("  • Control resources:       {}", stats.control_resource_count);
+        println!("\n💡 You can now query the database using SQLite tools:");
+        println!("  sqlite3 {:?}", output_db_path.as_ref());
+        println!("\n📋 Example queries:");
+        println!("  • List all jobs:           SELECT job_name, folder_name FROM jobs;");
+        println!("  • Critical jobs:           SELECT job_name FROM jobs WHERE critical = 1;");
+        println!("  • Jobs with dependencies:  SELECT j.job_name, COUNT(ic.id) as dep_count");
+        println!("                             FROM jobs j LEFT JOIN in_conditions ic ON j.id = ic.job_id");
+        println!("                             GROUP BY j.id HAVING dep_count > 0;");
+        println!("{}", "=".repeat(80));
+
+        info!("SQLite export complete!");
         
         Ok(())
     }
