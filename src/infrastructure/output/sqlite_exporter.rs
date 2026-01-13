@@ -280,7 +280,7 @@ impl SqliteExporter {
         
         tx.prepare_cached(
             r#"
-            INSERT INTO jobs (
+            INSERT OR REPLACE INTO jobs (
                 job_name, folder_name, application, sub_application,
                 appl_type, appl_ver,
                 description, owner, run_as, priority, critical, task_type, cyclic,
