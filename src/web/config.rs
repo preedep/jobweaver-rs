@@ -22,7 +22,7 @@ pub struct EntraIdConfig {
 impl Default for WebConfig {
     fn default() -> Self {
         Self {
-            host: "127.0.0.1".to_string(),
+            host: "0.0.0.0".to_string(),
             port: 8080,
             database_path: "controlm.db".to_string(),
             jwt_secret: "your-secret-key-change-in-production".to_string(),
