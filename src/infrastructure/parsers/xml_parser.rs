@@ -117,8 +117,18 @@ impl ControlMXmlParser {
         let job_name = node.attribute("JOBNAME").unwrap_or("UNKNOWN").to_string();
         let mut job = Job::new(job_name, folder_name);
         
+        self.parse_basic_attributes(node, &mut job);
+        self.parse_scheduling_attributes(node, &mut job);
+        self.parse_child_elements(node, &mut job);
+        
+        Ok(job)
+    }
+    
+    fn parse_basic_attributes(&self, node: &roxmltree::Node, job: &mut Job) {
         job.application = node.attribute("APPLICATION").map(|s| s.to_string());
         job.sub_application = node.attribute("SUB_APPLICATION").map(|s| s.to_string());
+        job.appl_type = node.attribute("APPL_TYPE").map(|s| s.to_string());
+        job.appl_ver = node.attribute("APPL_VER").map(|s| s.to_string());
         job.description = node.attribute("DESCRIPTION").map(|s| s.to_string());
         job.owner = node.attribute("OWNER").map(|s| s.to_string());
         job.run_as = node.attribute("RUN_AS").map(|s| s.to_string());
@@ -128,71 +138,77 @@ impl ControlMXmlParser {
         job.cyclic = node.attribute("CYCLIC") == Some("Y");
         job.node_id = node.attribute("NODEID").map(|s| s.to_string());
         job.cmdline = node.attribute("CMDLINE").map(|s| s.to_string());
-        
+    }
+    
+    fn parse_scheduling_attributes(&self, node: &roxmltree::Node, job: &mut Job) {
         job.scheduling.time_from = node.attribute("TIMEFROM").map(|s| s.to_string());
         job.scheduling.time_to = node.attribute("TIMETO").map(|s| s.to_string());
         job.scheduling.days_calendar = node.attribute("DAYSCAL").map(|s| s.to_string());
         job.scheduling.weeks_calendar = node.attribute("WEEKSCAL").map(|s| s.to_string());
         job.scheduling.conf_calendar = node.attribute("CONFCAL").map(|s| s.to_string());
-        
-        for child in node.children() {
-            if !child.is_element() {
-                continue;
-            }
-            
+    }
+    
+    fn parse_child_elements(&self, node: &roxmltree::Node, job: &mut Job) {
+        for child in node.children().filter(|n| n.is_element()) {
             match child.tag_name().name() {
-                "INCOND" => {
-                    if let Some(name) = child.attribute("NAME") {
-                        let cond = Condition::new_in(name.to_string());
-                        job.in_conditions.push(cond);
-                    }
-                }
-                "OUTCOND" => {
-                    if let Some(name) = child.attribute("NAME") {
-                        let cond = Condition::new_out(name.to_string());
-                        job.out_conditions.push(cond);
-                    }
-                }
-                "VARIABLE" => {
-                    if let (Some(name), Some(value)) = (child.attribute("NAME"), child.attribute("VALUE")) {
-                        job.variables.insert(name.to_string(), value.to_string());
-                    }
-                }
-                "CONTROL" => {
-                    if let Some(name) = child.attribute("NAME") {
-                        let resource = ControlResource::new(name.to_string());
-                        job.control_resources.push(resource);
-                    }
-                }
-                "QUANTITATIVE" => {
-                    if let Some(name) = child.attribute("NAME") {
-                        let quant = child.attribute("QUANT")
-                            .and_then(|q| q.parse::<i32>().ok())
-                            .unwrap_or(1);
-                        let resource = QuantitativeResource::new(name.to_string(), quant);
-                        job.quantitative_resources.push(resource);
-                    }
-                }
-                "ON" => {
-                    let mut on_cond = OnCondition::new();
-                    on_cond.stmt = child.attribute("STMT").map(|s| s.to_string());
-                    on_cond.code = child.attribute("CODE").map(|s| s.to_string());
-                    
-                    for action_node in child.children() {
-                        if action_node.is_element() && action_node.tag_name().name() == "DOACTION" {
-                            if let Some(action) = action_node.attribute("ACTION") {
-                                on_cond.actions.push(DoAction::Action(action.to_string()));
-                            }
-                        }
-                    }
-                    
-                    job.on_conditions.push(on_cond);
-                }
+                "INCOND" => self.parse_in_condition(&child, job),
+                "OUTCOND" => self.parse_out_condition(&child, job),
+                "VARIABLE" => self.parse_variable(&child, job),
+                "CONTROL" => self.parse_control_resource(&child, job),
+                "QUANTITATIVE" => self.parse_quantitative_resource(&child, job),
+                "ON" => self.parse_on_condition(&child, job),
                 _ => {}
             }
         }
+    }
+    
+    fn parse_in_condition(&self, node: &roxmltree::Node, job: &mut Job) {
+        if let Some(name) = node.attribute("NAME") {
+            job.in_conditions.push(Condition::new_in(name.to_string()));
+        }
+    }
+    
+    fn parse_out_condition(&self, node: &roxmltree::Node, job: &mut Job) {
+        if let Some(name) = node.attribute("NAME") {
+            job.out_conditions.push(Condition::new_out(name.to_string()));
+        }
+    }
+    
+    fn parse_variable(&self, node: &roxmltree::Node, job: &mut Job) {
+        if let (Some(name), Some(value)) = (node.attribute("NAME"), node.attribute("VALUE")) {
+            job.variables.insert(name.to_string(), value.to_string());
+        }
+    }
+    
+    fn parse_control_resource(&self, node: &roxmltree::Node, job: &mut Job) {
+        if let Some(name) = node.attribute("NAME") {
+            job.control_resources.push(ControlResource::new(name.to_string()));
+        }
+    }
+    
+    fn parse_quantitative_resource(&self, node: &roxmltree::Node, job: &mut Job) {
+        if let Some(name) = node.attribute("NAME") {
+            let quant = node.attribute("QUANT")
+                .and_then(|q| q.parse::<i32>().ok())
+                .unwrap_or(1);
+            job.quantitative_resources.push(QuantitativeResource::new(name.to_string(), quant));
+        }
+    }
+    
+    fn parse_on_condition(&self, node: &roxmltree::Node, job: &mut Job) {
+        let mut on_cond = OnCondition::new();
+        on_cond.stmt = node.attribute("STMT").map(|s| s.to_string());
+        on_cond.code = node.attribute("CODE").map(|s| s.to_string());
         
-        Ok(job)
+        for action_node in node.children().filter(|n| n.is_element()) {
+            if action_node.tag_name().name() == "DOACTION" {
+                if let Some(action) = action_node.attribute("ACTION") {
+                    on_cond.actions.push(DoAction::Action(action.to_string()));
+                }
+            }
+        }
+        
+        job.on_conditions.push(on_cond);
     }
 }
 

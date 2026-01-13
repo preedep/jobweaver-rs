@@ -190,19 +190,34 @@ function switchContentPage(page) {
 
 // Dashboard
 async function loadDashboard() {
+    const startTime = performance.now();
+    console.log('📊 [DASHBOARD] Loading dashboard statistics...');
+    
     try {
+        const fetchStart = performance.now();
         const response = await fetch(`${API_BASE}/dashboard/stats`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
         });
         
+        const fetchEnd = performance.now();
+        console.log(`⏱️  [DASHBOARD] Stats received in ${(fetchEnd - fetchStart).toFixed(2)}ms`);
+        
         const result = await response.json();
         
         if (result.success) {
             const stats = result.data;
             
-            // Update stat cards
+            console.log('📈 [DASHBOARD] Statistics:');
+            console.log(`  - Total Jobs: ${stats.total_jobs}`);
+            console.log(`  - Total Folders: ${stats.total_folders}`);
+            console.log(`  - Critical Jobs: ${stats.critical_jobs}`);
+            console.log(`  - Cyclic Jobs: ${stats.cyclic_jobs}`);
+            console.log(`  - File Transfer Jobs: ${stats.file_transfer_jobs}`);
+            console.log(`  - CLI Jobs: ${stats.cli_jobs}`);
+            
+            console.log('🎨 [DASHBOARD] Updating stat cards...');
             document.getElementById('stat-total-jobs').textContent = stats.total_jobs.toLocaleString();
             document.getElementById('stat-total-folders').textContent = stats.total_folders.toLocaleString();
             document.getElementById('stat-critical-jobs').textContent = stats.critical_jobs.toLocaleString();
@@ -210,14 +225,17 @@ async function loadDashboard() {
             document.getElementById('stat-file-transfer').textContent = stats.file_transfer_jobs.toLocaleString();
             document.getElementById('stat-cli-jobs').textContent = stats.cli_jobs.toLocaleString();
             
-            // Render charts
+            console.log('📊 [DASHBOARD] Rendering charts...');
             renderBarChart('chart-applications', stats.jobs_by_application, 'application', 'count');
             renderBarChart('chart-folders', stats.jobs_by_folder, 'folder_name', 'job_count');
             renderBarChart('chart-task-types', stats.jobs_by_task_type, 'task_type', 'count');
             renderComplexityChart('chart-complexity', stats.complexity_distribution);
+            
+            const endTime = performance.now();
+            console.log(`✅ [DASHBOARD] Dashboard loaded in ${(endTime - startTime).toFixed(2)}ms`);
         }
     } catch (error) {
-        console.error('Failed to load dashboard:', error);
+        console.error('❌ [DASHBOARD] Failed to load dashboard:', error);
     }
 }
 
@@ -283,6 +301,9 @@ function initializeSelect2() {
 }
 
 async function loadFilterOptions() {
+    const startTime = performance.now();
+    console.log('🔧 [FILTERS] Loading filter options...');
+    
     try {
         const response = await fetch(`${API_BASE}/filters`, {
             headers: {
@@ -295,17 +316,28 @@ async function loadFilterOptions() {
         if (result.success) {
             const options = result.data;
             
+            console.log('📊 [FILTERS] Filter counts:');
+            console.log(`  - Folders: ${options.folders.length}`);
+            console.log(`  - Applications: ${options.applications.length}`);
+            console.log(`  - APPL_TYPE: ${options.appl_types.length}`);
+            console.log(`  - APPL_VER: ${options.appl_vers.length}`);
+            console.log(`  - Task Types: ${options.task_types.length}`);
+            
+            console.log('🎨 [FILTERS] Populating dropdowns...');
             populateSelect('filter-folder', options.folders);
             populateSelect('filter-application', options.applications);
             populateSelect('filter-appl-type', options.appl_types);
             populateSelect('filter-appl-ver', options.appl_vers);
             populateSelect('filter-task-type', options.task_types);
             
-            // Initialize Select2 after populating
+            console.log('🔍 [FILTERS] Initializing Select2...');
             initializeSelect2();
+            
+            const endTime = performance.now();
+            console.log(`✅ [FILTERS] Filters loaded in ${(endTime - startTime).toFixed(2)}ms`);
         }
     } catch (error) {
-        console.error('Failed to load filter options:', error);
+        console.error('❌ [FILTERS] Failed to load filter options:', error);
     }
 }
 
@@ -342,6 +374,8 @@ function resetFilters() {
 }
 
 async function performSearch() {
+    const startTime = performance.now();
+    console.log('🔍 [SEARCH] Starting search operation...');
     showLoading(true);
     
     const jobName = document.getElementById('filter-job-name').value;
@@ -361,6 +395,9 @@ async function performSearch() {
     if (taskType) currentFilters.task_type = taskType;
     if (critical) currentFilters.critical = critical === 'true';
     
+    console.log('📋 [SEARCH] Filters:', currentFilters);
+    console.log('📄 [SEARCH] Page:', currentPage, 'Per page:', currentPerPage);
+    
     const params = new URLSearchParams({
         ...currentFilters,
         page: currentPage,
@@ -370,21 +407,40 @@ async function performSearch() {
     });
     
     try {
+        console.log('🌐 [SEARCH] Sending API request...');
+        const fetchStart = performance.now();
+        
         const response = await fetch(`${API_BASE}/jobs/search?${params}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
         });
         
+        const fetchEnd = performance.now();
+        console.log(`⏱️  [SEARCH] API response received in ${(fetchEnd - fetchStart).toFixed(2)}ms`);
+        
+        console.log('📦 [SEARCH] Parsing response...');
         const result = await response.json();
         
         if (result.success) {
+            console.log(`✅ [SEARCH] Found ${result.data.total} jobs (showing ${result.data.jobs.length})`);
+            console.log('🎨 [SEARCH] Rendering table...');
+            const renderStart = performance.now();
+            
             renderJobsTable(result.data);
+            
+            const renderEnd = performance.now();
+            console.log(`✅ [SEARCH] Table rendered in ${(renderEnd - renderStart).toFixed(2)}ms`);
+        } else {
+            console.error('❌ [SEARCH] Search failed:', result.error);
         }
     } catch (error) {
-        console.error('Search failed:', error);
+        console.error('❌ [SEARCH] Error:', error);
     } finally {
         showLoading(false);
+        const endTime = performance.now();
+        console.log(`🏁 [SEARCH] Total search time: ${(endTime - startTime).toFixed(2)}ms`);
+        console.log('─────────────────────────────────────');
     }
 }
 
@@ -606,6 +662,8 @@ function escapeHtml(text) {
 }
 
 async function exportToCSV() {
+    const startTime = performance.now();
+    console.log('📥 [EXPORT] Starting CSV export...');
     showLoading(true);
     document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Exporting to CSV...';
     
@@ -626,17 +684,29 @@ async function exportToCSV() {
     if (taskType) filters.task_type = taskType;
     if (critical) filters.critical = critical === 'true';
     
+    console.log('📋 [EXPORT] Filters:', filters);
+    
     const params = new URLSearchParams(filters);
     
     try {
+        console.log('🌐 [EXPORT] Sending export request...');
+        const fetchStart = performance.now();
+        
         const response = await fetch(`${API_BASE}/jobs/export/csv?${params}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
         });
         
+        const fetchEnd = performance.now();
+        console.log(`⏱️  [EXPORT] Response received in ${(fetchEnd - fetchStart).toFixed(2)}ms`);
+        
         if (response.ok) {
+            console.log('📦 [EXPORT] Creating blob...');
             const blob = await response.blob();
+            console.log(`📊 [EXPORT] CSV size: ${(blob.size / 1024).toFixed(2)} KB`);
+            
+            console.log('💾 [EXPORT] Triggering download...');
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -645,15 +715,21 @@ async function exportToCSV() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
+            
+            console.log('✅ [EXPORT] CSV exported successfully');
         } else {
+            console.error('❌ [EXPORT] Export failed with status:', response.status);
             alert('Failed to export CSV');
         }
     } catch (error) {
-        console.error('Export failed:', error);
+        console.error('❌ [EXPORT] Error:', error);
         alert('Failed to export CSV');
     } finally {
         showLoading(false);
         document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Searching jobs...';
+        const endTime = performance.now();
+        console.log(`🏁 [EXPORT] Total export time: ${(endTime - startTime).toFixed(2)}ms`);
+        console.log('─────────────────────────────────────');
     }
 }
 

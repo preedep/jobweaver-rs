@@ -81,6 +81,8 @@ impl SqliteExporter {
                 folder_name TEXT NOT NULL,
                 application TEXT,
                 sub_application TEXT,
+                appl_type TEXT,
+                appl_ver TEXT,
                 description TEXT,
                 owner TEXT,
                 run_as TEXT,
@@ -276,34 +278,37 @@ impl SqliteExporter {
         // Throttled progress reporting (every 10 jobs)
         self.report_progress_throttled(&format!("Job: {}", job.job_name), false);
         
-        tx.execute(
+        tx.prepare_cached(
             r#"
-            INSERT OR REPLACE INTO jobs 
-            (job_name, folder_name, application, sub_application, description, 
-             owner, run_as, priority, critical, task_type, cyclic, node_id, cmdline,
-             created_by, creation_date, change_userid, change_date)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            INSERT INTO jobs (
+                job_name, folder_name, application, sub_application,
+                appl_type, appl_ver,
+                description, owner, run_as, priority, critical, task_type, cyclic,
+                node_id, cmdline, created_by, creation_date, change_userid, change_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
-            params![
-                &job.job_name,
-                &job.folder_name,
-                &job.application,
-                &job.sub_application,
-                &job.description,
-                &job.owner,
-                &job.run_as,
-                &job.priority,
-                job.critical as i32,
-                &job.task_type,
-                job.cyclic as i32,
-                &job.node_id,
-                &job.cmdline,
-                &job.created_by,
-                &job.creation_date,
-                &job.change_userid,
-                &job.change_date,
-            ],
-        ).context("Failed to insert job")?;
+        )?
+        .execute(params![
+            &job.job_name,
+            &job.folder_name,
+            &job.application,
+            &job.sub_application,
+            &job.appl_type,
+            &job.appl_ver,
+            &job.description,
+            &job.owner,
+            &job.run_as,
+            &job.priority,
+            if job.critical { 1 } else { 0 },
+            &job.task_type,
+            if job.cyclic { 1 } else { 0 },
+            &job.node_id,
+            &job.cmdline,
+            &job.created_by,
+            &job.creation_date,
+            &job.change_userid,
+            &job.change_date,
+        ])?;
 
         let job_id = tx.last_insert_rowid();
 
