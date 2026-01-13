@@ -17,7 +17,23 @@ impl AnalyzeCommand {
         println!("📊 CONTROL-M MIGRATION ANALYSIS SUMMARY");
         println!("{}", "=".repeat(80));
         
-        // Overall Statistics
+        Self::print_overall_statistics(output);
+        Self::print_difficulty_distribution(output);
+        Self::print_migration_waves(output);
+        Self::print_top_complex_jobs(output);
+        
+        let critical_jobs = Self::get_critical_jobs(output);
+        Self::print_critical_jobs(&critical_jobs);
+        
+        let quick_wins = Self::get_quick_wins(output);
+        Self::print_quick_wins(&quick_wins);
+        
+        Self::print_recommendations(output, &critical_jobs, &quick_wins);
+        
+        println!("\n{}", "=".repeat(80));
+    }
+
+    fn print_overall_statistics(output: &AnalysisOutput) {
         println!("\n📈 Overall Statistics:");
         println!("  • Total Jobs:              {}", output.summary.total_jobs);
         println!("  • Total Folders:           {}", output.summary.total_folders);
@@ -27,39 +43,62 @@ impl AnalyzeCommand {
         if output.summary.has_circular_dependencies {
             println!("  ⚠️  Circular Dependencies:  DETECTED");
         }
+    }
+
+    fn calculate_percentage(count: usize, total: usize) -> f64 {
+        if total == 0 {
+            0.0
+        } else {
+            (count as f64 / total as f64) * 100.0
+        }
+    }
+
+    fn print_difficulty_distribution(output: &AnalysisOutput) {
+        let easy_count = output.jobs.iter()
+            .filter(|j| j.migration_difficulty == "Easy")
+            .count();
+        let medium_count = output.jobs.iter()
+            .filter(|j| j.migration_difficulty == "Medium")
+            .count();
+        let hard_count = output.jobs.iter()
+            .filter(|j| j.migration_difficulty == "Hard")
+            .count();
         
-        // Difficulty Distribution
-        let easy_count = output.jobs.iter().filter(|j| j.migration_difficulty == "Easy").count();
-        let medium_count = output.jobs.iter().filter(|j| j.migration_difficulty == "Medium").count();
-        let hard_count = output.jobs.iter().filter(|j| j.migration_difficulty == "Hard").count();
+        let total = output.summary.total_jobs;
         
         println!("\n🎯 Migration Difficulty Distribution:");
         println!("  • Easy (0-30):             {} jobs ({:.1}%)", 
-            easy_count, (easy_count as f64 / output.summary.total_jobs as f64) * 100.0);
+            easy_count, Self::calculate_percentage(easy_count, total));
         println!("  • Medium (31-60):          {} jobs ({:.1}%)", 
-            medium_count, (medium_count as f64 / output.summary.total_jobs as f64) * 100.0);
+            medium_count, Self::calculate_percentage(medium_count, total));
         println!("  • Hard (61+):              {} jobs ({:.1}%)", 
-            hard_count, (hard_count as f64 / output.summary.total_jobs as f64) * 100.0);
+            hard_count, Self::calculate_percentage(hard_count, total));
+    }
+
+    fn calculate_wave_average_complexity(output: &AnalysisOutput, wave_number: usize) -> f64 {
+        let wave_jobs: Vec<_> = output.jobs.iter()
+            .filter(|j| j.migration_wave == wave_number)
+            .collect();
         
-        // Migration Waves Summary
+        if wave_jobs.is_empty() {
+            0.0
+        } else {
+            wave_jobs.iter()
+                .map(|j| j.complexity_score as f64)
+                .sum::<f64>() / wave_jobs.len() as f64
+        }
+    }
+
+    fn print_migration_waves(output: &AnalysisOutput) {
         println!("\n🌊 Migration Waves Breakdown:");
         for wave in &output.migration_waves {
-            let wave_jobs: Vec<_> = output.jobs.iter()
-                .filter(|j| j.migration_wave == wave.wave)
-                .collect();
-            let avg_complexity: f64 = if !wave_jobs.is_empty() {
-                wave_jobs.iter()
-                    .map(|j| j.complexity_score as f64)
-                    .sum::<f64>() / wave_jobs.len() as f64
-            } else {
-                0.0
-            };
-            
+            let avg_complexity = Self::calculate_wave_average_complexity(output, wave.wave);
             println!("  Wave {}: {} jobs (avg complexity: {:.1})", 
                 wave.wave_number, wave.jobs.len(), avg_complexity);
         }
-        
-        // Top 10 Most Complex Jobs
+    }
+
+    fn print_top_complex_jobs(output: &AnalysisOutput) {
         println!("\n🔥 Top 10 Most Complex Jobs:");
         let mut sorted_jobs = output.jobs.clone();
         sorted_jobs.sort_by(|a, b| b.complexity_score.cmp(&a.complexity_score));
@@ -70,50 +109,67 @@ impl AnalyzeCommand {
             println!("     Folder: {} | Difficulty: {}", 
                 job.folder_name, job.migration_difficulty);
         }
-        
-        // Critical Jobs (High complexity + Critical flag)
-        let critical_jobs: Vec<_> = output.jobs.iter()
+    }
+
+    fn get_critical_jobs(output: &AnalysisOutput) -> Vec<&crate::presentation::dto::JobOutput> {
+        output.jobs.iter()
             .filter(|j| j.is_critical)
-            .collect();
-        
-        if !critical_jobs.is_empty() {
-            println!("\n⚡ Critical Jobs ({} total):", critical_jobs.len());
-            for (i, job) in critical_jobs.iter().take(5).enumerate() {
-                println!("  {}. {} (Complexity: {}, Wave: {})", 
-                    i + 1, job.job_name, job.complexity_score, job.migration_wave);
-            }
-            if critical_jobs.len() > 5 {
-                println!("  ... and {} more critical jobs", critical_jobs.len() - 5);
-            }
+            .collect()
+    }
+
+    fn print_critical_jobs(critical_jobs: &[&crate::presentation::dto::JobOutput]) {
+        if critical_jobs.is_empty() {
+            return;
         }
         
-        // Quick Wins
-        let quick_wins: Vec<_> = output.jobs.iter()
+        println!("\n⚡ Critical Jobs ({} total):", critical_jobs.len());
+        for (i, job) in critical_jobs.iter().take(5).enumerate() {
+            println!("  {}. {} (Complexity: {}, Wave: {})", 
+                i + 1, job.job_name, job.complexity_score, job.migration_wave);
+        }
+        
+        if critical_jobs.len() > 5 {
+            println!("  ... and {} more critical jobs", critical_jobs.len() - 5);
+        }
+    }
+
+    fn get_quick_wins(output: &AnalysisOutput) -> Vec<&crate::presentation::dto::JobOutput> {
+        output.jobs.iter()
             .filter(|j| j.migration_difficulty == "Easy" && j.dependency_count == 0)
-            .collect();
-        
-        if !quick_wins.is_empty() {
-            println!("\n✅ Quick Wins ({} jobs with no dependencies):", quick_wins.len());
-            for (i, job) in quick_wins.iter().take(5).enumerate() {
-                println!("  {}. {} (Complexity: {})", 
-                    i + 1, job.job_name, job.complexity_score);
-            }
-            if quick_wins.len() > 5 {
-                println!("  ... and {} more quick wins", quick_wins.len() - 5);
-            }
+            .collect()
+    }
+
+    fn print_quick_wins(quick_wins: &[&crate::presentation::dto::JobOutput]) {
+        if quick_wins.is_empty() {
+            return;
         }
         
-        // Recommendations
+        println!("\n✅ Quick Wins ({} jobs with no dependencies):", quick_wins.len());
+        for (i, job) in quick_wins.iter().take(5).enumerate() {
+            println!("  {}. {} (Complexity: {})", 
+                i + 1, job.job_name, job.complexity_score);
+        }
+        
+        if quick_wins.len() > 5 {
+            println!("  ... and {} more quick wins", quick_wins.len() - 5);
+        }
+    }
+
+    fn print_recommendations(
+        output: &AnalysisOutput,
+        critical_jobs: &[&crate::presentation::dto::JobOutput],
+        quick_wins: &[&crate::presentation::dto::JobOutput],
+    ) {
         println!("\n💡 Recommendations:");
         println!("  • Start with Wave 1 ({} jobs) - Low complexity, no dependencies", 
             output.migration_waves.get(0).map(|w| w.jobs.len()).unwrap_or(0));
         println!("  • Review {} critical jobs carefully before migration", critical_jobs.len());
+        
         if output.summary.has_circular_dependencies {
             println!("  • ⚠️  Resolve circular dependencies before migration");
         }
-        println!("  • {} quick wins can be migrated immediately", quick_wins.len());
         
-        println!("\n{}", "=".repeat(80));
+        println!("  • {} quick wins can be migrated immediately", quick_wins.len());
     }
 
     pub fn execute<P: AsRef<Path>>(
