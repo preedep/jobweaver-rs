@@ -2,6 +2,7 @@ pub mod domain;
 pub mod application;
 pub mod infrastructure;
 pub mod presentation;
+pub mod web;
 
 pub use domain::entities;
 pub use domain::value_objects;

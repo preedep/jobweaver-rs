@@ -38,6 +38,18 @@ pub enum Commands {
         #[arg(short, long, value_name = "FILE", default_value = "controlm.db", help = "Output SQLite database file")]
         output: PathBuf,
     },
+
+    #[command(about = "Start web server for interactive job exploration")]
+    Serve {
+        #[arg(short, long, value_name = "FILE", default_value = "controlm.db", help = "SQLite database file")]
+        database: PathBuf,
+
+        #[arg(short, long, default_value = "8080", help = "Port to listen on")]
+        port: u16,
+
+        #[arg(long, default_value = "127.0.0.1", help = "Host to bind to")]
+        host: String,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]

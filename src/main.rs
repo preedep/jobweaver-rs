@@ -4,8 +4,10 @@ use anyhow::Result;
 
 use jobweaver::presentation::cli::{Cli, Commands};
 use jobweaver::presentation::cli::commands::{AnalyzeCommand, ExportSqliteCommand};
+use jobweaver::web::{WebConfig, start_web_server};
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let filter = if cli.verbose {
@@ -32,6 +34,13 @@ fn main() -> Result<()> {
         }
         Commands::ExportSqlite { input, output } => {
             ExportSqliteCommand::execute(input, output)?;
+        }
+        Commands::Serve { database, port, host } => {
+            let config = WebConfig::new(database.to_string_lossy().to_string())
+                .with_port(*port)
+                .with_host(host.clone());
+            
+            start_web_server(config).await?;
         }
     }
 

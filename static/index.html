@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobWeaver - Control-M Job Explorer</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Login Page -->
+        <div id="login-page" class="page active">
+            <div class="login-container">
+                <div class="login-card">
+                    <div class="login-header">
+                        <i class="fas fa-network-wired"></i>
+                        <h1>JobWeaver</h1>
+                        <p>Control-M Job Explorer</p>
+                    </div>
+                    
+                    <div class="login-tabs">
+                        <button class="tab-btn active" data-tab="local">
+                            <i class="fas fa-user"></i> Username & Password
+                        </button>
+                        <button class="tab-btn" data-tab="entra">
+                            <i class="fab fa-microsoft"></i> Entra ID
+                        </button>
+                    </div>
+                    
+                    <div class="login-content">
+                        <div class="tab-content active" id="local-login">
+                            <form id="login-form">
+                                <div class="form-group">
+                                    <label for="username">Username</label>
+                                    <input type="text" id="username" name="username" placeholder="Enter username" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="password">Password</label>
+                                    <input type="password" id="password" name="password" placeholder="Enter password" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-block">
+                                    <i class="fas fa-sign-in-alt"></i> Sign In
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div class="tab-content" id="entra-login">
+                            <button id="entra-login-btn" class="btn btn-microsoft btn-block">
+                                <i class="fab fa-microsoft"></i> Sign in with Microsoft
+                            </button>
+                            <p class="text-muted text-center mt-3">
+                                Use your organization's Microsoft account
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div id="login-error" class="alert alert-error" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main App -->
+        <div id="main-app" class="page">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <i class="fas fa-network-wired"></i>
+                    <h2>JobWeaver</h2>
+                </div>
+                <nav class="sidebar-nav">
+                    <a href="#dashboard" class="nav-item active" data-page="dashboard">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="#jobs" class="nav-item" data-page="jobs">
+                        <i class="fas fa-tasks"></i>
+                        <span>Jobs</span>
+                    </a>
+                </nav>
+                <div class="sidebar-footer">
+                    <div class="user-info">
+                        <i class="fas fa-user-circle"></i>
+                        <span id="user-display-name">User</span>
+                    </div>
+                    <button id="logout-btn" class="btn btn-sm btn-outline">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Dashboard Page -->
+                <div id="dashboard-page" class="content-page active">
+                    <div class="page-header">
+                        <h1>Dashboard</h1>
+                        <p class="text-muted">Overview of Control-M jobs and statistics</p>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon bg-blue">
+                                <i class="fas fa-tasks"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="stat-total-jobs">-</h3>
+                                <p>Total Jobs</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-purple">
+                                <i class="fas fa-folder"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="stat-total-folders">-</h3>
+                                <p>Total Folders</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-red">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="stat-critical-jobs">-</h3>
+                                <p>Critical Jobs</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-green">
+                                <i class="fas fa-sync"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="stat-cyclic-jobs">-</h3>
+                                <p>Cyclic Jobs</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-orange">
+                                <i class="fas fa-file-export"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="stat-file-transfer">-</h3>
+                                <p>File Transfer Jobs</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon bg-teal">
+                                <i class="fas fa-terminal"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="stat-cli-jobs">-</h3>
+                                <p>CLI Jobs</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="charts-grid">
+                        <div class="chart-card">
+                            <h3>Top 10 Applications</h3>
+                            <div id="chart-applications" class="chart-content"></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Top 10 Folders</h3>
+                            <div id="chart-folders" class="chart-content"></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Jobs by Task Type</h3>
+                            <div id="chart-task-types" class="chart-content"></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Complexity Distribution</h3>
+                            <div id="chart-complexity" class="chart-content"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Jobs Page -->
+                <div id="jobs-page" class="content-page">
+                    <div class="page-header">
+                        <h1>Jobs</h1>
+                        <p class="text-muted">Search and explore Control-M jobs</p>
+                    </div>
+
+                    <!-- Search Filters -->
+                    <div class="filter-panel">
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label>Job Name</label>
+                                <input type="text" id="filter-job-name" placeholder="Search job name...">
+                            </div>
+                            <div class="filter-group">
+                                <label>Folder</label>
+                                <select id="filter-folder">
+                                    <option value="">All Folders</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label>Application</label>
+                                <select id="filter-application">
+                                    <option value="">All Applications</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label>Task Type</label>
+                                <select id="filter-task-type">
+                                    <option value="">All Types</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label>Critical</label>
+                                <select id="filter-critical">
+                                    <option value="">All</option>
+                                    <option value="true">Critical Only</option>
+                                    <option value="false">Non-Critical</option>
+                                </select>
+                            </div>
+                            <div class="filter-actions">
+                                <button id="search-btn" class="btn btn-primary">
+                                    <i class="fas fa-search"></i> Search
+                                </button>
+                                <button id="reset-btn" class="btn btn-outline">
+                                    <i class="fas fa-redo"></i> Reset
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results Table -->
+                    <div class="table-container">
+                        <div class="table-header">
+                            <div class="table-info">
+                                <span id="results-info">Showing 0 results</span>
+                            </div>
+                            <div class="table-actions">
+                                <label>Per page:</label>
+                                <select id="per-page">
+                                    <option value="25">25</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <table class="data-table" id="jobs-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="job_name">Job Name <i class="fas fa-sort"></i></th>
+                                    <th data-sort="folder_name">Folder <i class="fas fa-sort"></i></th>
+                                    <th data-sort="application">Application <i class="fas fa-sort"></i></th>
+                                    <th data-sort="task_type">Task Type <i class="fas fa-sort"></i></th>
+                                    <th data-sort="critical">Critical <i class="fas fa-sort"></i></th>
+                                    <th>Dependencies</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobs-table-body">
+                                <tr>
+                                    <td colspan="7" class="text-center">
+                                        <div class="loading">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading...
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="table-footer">
+                            <div class="pagination" id="pagination"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Job Detail Modal -->
+        <div id="job-detail-modal" class="modal">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h2 id="modal-job-name">Job Details</h2>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body" id="modal-job-details">
+                    <div class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
