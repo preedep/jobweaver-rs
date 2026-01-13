@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 use tracing::{info, warn};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::infrastructure::parsers::ControlMXmlParser;
 use crate::infrastructure::output::{JsonGenerator, CsvGenerator, HtmlGenerator, MarkdownGenerator, SqliteExporter};
@@ -218,12 +219,24 @@ impl ExportSqliteCommand {
     ) -> Result<()> {
         info!("Starting Control-M XML to SQLite export...");
         
+        // Create spinner for parsing
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+                .template("{spinner:.cyan} {msg}")
+                .unwrap()
+        );
+        spinner.set_message("📖 Parsing XML file...");
+        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+        
         let parser = ControlMXmlParser::new();
         info!("Parsing XML file: {:?}", input_path.as_ref());
         let folders = parser.parse_file(&input_path)
             .context("Failed to parse Control-M XML file")?;
         
-        info!("Found {} folders", folders.len());
+        spinner.finish_with_message(format!("✓ Found {} folders", folders.len()));
+        
         let total_jobs: usize = folders.iter().map(|f| f.total_jobs()).sum();
         info!("Total jobs: {}", total_jobs);
 
@@ -232,13 +245,37 @@ impl ExportSqliteCommand {
             return Ok(());
         }
 
+        // Create progress bar for export
+        let pb = ProgressBar::new(total_jobs as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                .unwrap()
+                .progress_chars("█▓▒░ ")
+        );
+        pb.set_message("🚀 Starting export...");
+
         info!("Creating SQLite database: {:?}", output_db_path.as_ref());
+        
+        let pb_clone = pb.clone();
         let exporter = SqliteExporter::new(&output_db_path)
-            .context("Failed to create SQLite database")?;
+            .context("Failed to create SQLite database")?
+            .with_progress_callback(move |msg: &str| {
+                if msg.starts_with("  → Job:") {
+                    pb_clone.inc(1);
+                    pb_clone.set_message(msg.trim_start_matches("  → ").to_string());
+                } else if msg.starts_with("Exporting folder") {
+                    pb_clone.set_message(format!("📁 {}", msg));
+                } else {
+                    pb_clone.set_message(msg.to_string());
+                }
+            });
 
         info!("Exporting folders and jobs to SQLite...");
         exporter.export_folders(&folders)
             .context("Failed to export data to SQLite")?;
+
+        pb.finish_with_message("✓ Export completed!");
 
         let stats = exporter.get_statistics()
             .context("Failed to get database statistics")?;

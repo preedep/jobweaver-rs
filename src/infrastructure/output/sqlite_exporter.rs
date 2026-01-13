@@ -3,8 +3,11 @@ use rusqlite::{Connection, params};
 use std::path::Path;
 use crate::domain::entities::*;
 
+pub type ProgressCallback = Box<dyn Fn(&str)>;
+
 pub struct SqliteExporter {
     conn: Connection,
+    progress_callback: Option<ProgressCallback>,
 }
 
 impl SqliteExporter {
@@ -12,10 +15,27 @@ impl SqliteExporter {
         let conn = Connection::open(db_path)
             .context("Failed to open SQLite database")?;
         
-        let exporter = Self { conn };
+        let exporter = Self { 
+            conn,
+            progress_callback: None,
+        };
         exporter.create_schema()?;
         
         Ok(exporter)
+    }
+
+    pub fn with_progress_callback<F>(mut self, callback: F) -> Self 
+    where
+        F: Fn(&str) + 'static,
+    {
+        self.progress_callback = Some(Box::new(callback));
+        self
+    }
+
+    fn report_progress(&self, message: &str) {
+        if let Some(callback) = &self.progress_callback {
+            callback(message);
+        }
     }
 
     fn create_schema(&self) -> Result<()> {
@@ -176,9 +196,15 @@ impl SqliteExporter {
     }
 
     pub fn export_folders(&self, folders: &[Folder]) -> Result<()> {
-        for folder in folders {
+        self.report_progress("Starting export...");
+        
+        for (idx, folder) in folders.iter().enumerate() {
+            self.report_progress(&format!("Exporting folder {}/{}: {}", 
+                idx + 1, folders.len(), folder.folder_name));
             self.export_folder(folder)?;
         }
+        
+        self.report_progress("Export completed!");
         Ok(())
     }
 
@@ -218,6 +244,8 @@ impl SqliteExporter {
     }
 
     fn export_job(&self, job: &Job) -> Result<()> {
+        self.report_progress(&format!("  → Job: {}", job.job_name));
+        
         self.conn.execute(
             r#"
             INSERT OR REPLACE INTO jobs 

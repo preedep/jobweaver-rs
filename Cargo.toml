@@ -41,6 +41,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Database
 rusqlite = { version = "0.38", features = ["bundled"] }
 
+# Progress indicators
+indicatif = "0.17"
+
 [dev-dependencies]
 # Testing
 mockall = "0.14"

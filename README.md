@@ -101,7 +101,7 @@ jobweaver analyze -i input.xml -o reports -f csv -v
 
 #### Export SQLite Command
 
-Export raw Control-M data to SQLite database for custom queries and analysis.
+Export raw Control-M data to SQLite database for custom queries and analysis. Features real-time progress animation showing export status.
 
 ```bash
 jobweaver export-sqlite -i input.xml -o controlm.db
@@ -225,6 +225,7 @@ jobweaver-rs/
 - **csv**: CSV generation
 - **tera**: HTML templating
 - **rusqlite**: SQLite database operations
+- **indicatif**: Progress bars and spinners
 - **anyhow**: Error handling
 - **tracing**: Logging
 - **encoding_rs**: Multi-encoding support
@@ -366,7 +367,7 @@ jobweaver analyze -i input.xml -o reports -f csv -v
 
 #### คำสั่ง Export SQLite
 
-Export ข้อมูล Control-M แบบ raw ไปยัง SQLite database เพื่อ query และวิเคราะห์แบบกำหนดเอง
+Export ข้อมูล Control-M แบบ raw ไปยัง SQLite database เพื่อ query และวิเคราะห์แบบกำหนดเอง มี animation แสดงความคืบหน้าแบบ real-time
 
 ```bash
 jobweaver export-sqlite -i input.xml -o controlm.db
@@ -490,6 +491,7 @@ jobweaver-rs/
 - **csv**: CSV generation
 - **tera**: HTML templating
 - **rusqlite**: การทำงานกับ SQLite database
+- **indicatif**: Progress bars และ spinners
 - **anyhow**: Error handling
 - **tracing**: Logging
 - **encoding_rs**: รองรับ encoding หลายแบบ
