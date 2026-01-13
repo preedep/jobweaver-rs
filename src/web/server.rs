@@ -48,6 +48,7 @@ pub async fn start_web_server(config: WebConfig) -> std::io::Result<()> {
                             .route("/auth/me", web::get().to(handlers::get_current_user))
                             .route("/jobs/search", web::get().to(handlers::search_jobs))
                             .route("/jobs/{id}", web::get().to(handlers::get_job_detail))
+                            .route("/jobs/export/csv", web::get().to(handlers::export_jobs_csv))
                             .route("/dashboard/stats", web::get().to(handlers::get_dashboard_stats))
                             .route("/filters", web::get().to(handlers::get_filter_options))
                     )

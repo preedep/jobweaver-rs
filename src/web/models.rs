@@ -38,6 +38,8 @@ pub struct JobSearchRequest {
     pub application: Option<String>,
     pub critical: Option<bool>,
     pub task_type: Option<String>,
+    pub appl_type: Option<String>,
+    pub appl_ver: Option<String>,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
     pub sort_by: Option<String>,
@@ -67,6 +69,8 @@ pub struct JobDetail {
     pub folder_name: String,
     pub application: Option<String>,
     pub sub_application: Option<String>,
+    pub appl_type: Option<String>,
+    pub appl_ver: Option<String>,
     pub description: Option<String>,
     pub owner: Option<String>,
     pub run_as: Option<String>,
@@ -193,6 +197,8 @@ pub struct FilterOptions {
     pub folders: Vec<String>,
     pub task_types: Vec<String>,
     pub owners: Vec<String>,
+    pub appl_types: Vec<String>,
+    pub appl_vers: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

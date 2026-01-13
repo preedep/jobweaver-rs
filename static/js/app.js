@@ -87,6 +87,7 @@ function initializeEventListeners() {
     // Search and filters
     document.getElementById('search-btn').addEventListener('click', performSearch);
     document.getElementById('reset-btn').addEventListener('click', resetFilters);
+    document.getElementById('export-csv-btn').addEventListener('click', exportToCSV);
     document.getElementById('per-page').addEventListener('change', (e) => {
         currentPerPage = parseInt(e.target.value);
         performSearch();
@@ -273,6 +274,14 @@ function renderComplexityChart(containerId, data) {
 }
 
 // Jobs Search
+function initializeSelect2() {
+    $('.select2-dropdown').select2({
+        placeholder: 'Select an option',
+        allowClear: true,
+        width: '100%'
+    });
+}
+
 async function loadFilterOptions() {
     try {
         const response = await fetch(`${API_BASE}/filters`, {
@@ -288,7 +297,12 @@ async function loadFilterOptions() {
             
             populateSelect('filter-folder', options.folders);
             populateSelect('filter-application', options.applications);
+            populateSelect('filter-appl-type', options.appl_types);
+            populateSelect('filter-appl-ver', options.appl_vers);
             populateSelect('filter-task-type', options.task_types);
+            
+            // Initialize Select2 after populating
+            initializeSelect2();
         }
     } catch (error) {
         console.error('Failed to load filter options:', error);
@@ -316,8 +330,10 @@ function populateSelect(selectId, options) {
 
 function resetFilters() {
     document.getElementById('filter-job-name').value = '';
-    document.getElementById('filter-folder').value = '';
-    document.getElementById('filter-application').value = '';
+    $('#filter-folder').val('').trigger('change');
+    $('#filter-application').val('').trigger('change');
+    $('#filter-appl-type').val('').trigger('change');
+    $('#filter-appl-ver').val('').trigger('change');
     document.getElementById('filter-task-type').value = '';
     document.getElementById('filter-critical').value = '';
     currentFilters = {};
@@ -326,9 +342,13 @@ function resetFilters() {
 }
 
 async function performSearch() {
+    showLoading(true);
+    
     const jobName = document.getElementById('filter-job-name').value;
-    const folder = document.getElementById('filter-folder').value;
-    const application = document.getElementById('filter-application').value;
+    const folder = $('#filter-folder').val();
+    const application = $('#filter-application').val();
+    const applType = $('#filter-appl-type').val();
+    const applVer = $('#filter-appl-ver').val();
     const taskType = document.getElementById('filter-task-type').value;
     const critical = document.getElementById('filter-critical').value;
     
@@ -336,6 +356,8 @@ async function performSearch() {
     if (jobName) currentFilters.job_name = jobName;
     if (folder) currentFilters.folder_name = folder;
     if (application) currentFilters.application = application;
+    if (applType) currentFilters.appl_type = applType;
+    if (applVer) currentFilters.appl_ver = applVer;
     if (taskType) currentFilters.task_type = taskType;
     if (critical) currentFilters.critical = critical === 'true';
     
@@ -361,6 +383,17 @@ async function performSearch() {
         }
     } catch (error) {
         console.error('Search failed:', error);
+    } finally {
+        showLoading(false);
+    }
+}
+
+function showLoading(show) {
+    const overlay = document.getElementById('loading-overlay');
+    if (show) {
+        overlay.classList.add('active');
+    } else {
+        overlay.classList.remove('active');
     }
 }
 
@@ -380,6 +413,8 @@ function renderJobsTable(data) {
             <td><strong>${escapeHtml(job.job_name)}</strong></td>
             <td>${escapeHtml(job.folder_name)}</td>
             <td>${escapeHtml(job.application || '-')}</td>
+            <td>${escapeHtml(job.appl_type || '-')}</td>
+            <td>${escapeHtml(job.appl_ver || '-')}</td>
             <td>${escapeHtml(job.task_type || '-')}</td>
             <td>
                 ${job.critical ? '<span class="badge badge-danger">Critical</span>' : '<span class="badge badge-success">Normal</span>'}
@@ -568,6 +603,58 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+async function exportToCSV() {
+    showLoading(true);
+    document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Exporting to CSV...';
+    
+    const jobName = document.getElementById('filter-job-name').value;
+    const folder = $('#filter-folder').val();
+    const application = $('#filter-application').val();
+    const applType = $('#filter-appl-type').val();
+    const applVer = $('#filter-appl-ver').val();
+    const taskType = document.getElementById('filter-task-type').value;
+    const critical = document.getElementById('filter-critical').value;
+    
+    const filters = {};
+    if (jobName) filters.job_name = jobName;
+    if (folder) filters.folder_name = folder;
+    if (application) filters.application = application;
+    if (applType) filters.appl_type = applType;
+    if (applVer) filters.appl_ver = applVer;
+    if (taskType) filters.task_type = taskType;
+    if (critical) filters.critical = critical === 'true';
+    
+    const params = new URLSearchParams(filters);
+    
+    try {
+        const response = await fetch(`${API_BASE}/jobs/export/csv?${params}`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `jobs_export_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } else {
+            alert('Failed to export CSV');
+        }
+    } catch (error) {
+        console.error('Export failed:', error);
+        alert('Failed to export CSV');
+    } finally {
+        showLoading(false);
+        document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Searching jobs...';
+    }
 }
 
 // Make functions global for onclick handlers

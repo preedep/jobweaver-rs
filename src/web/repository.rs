@@ -51,6 +51,16 @@ impl JobRepository {
             params_vec.push(Box::new(task_type.clone()));
         }
         
+        if let Some(ref appl_type) = request.appl_type {
+            where_clauses.push("appl_type = ?");
+            params_vec.push(Box::new(appl_type.clone()));
+        }
+        
+        if let Some(ref appl_ver) = request.appl_ver {
+            where_clauses.push("appl_ver = ?");
+            params_vec.push(Box::new(appl_ver.clone()));
+        }
+        
         let where_clause = if where_clauses.is_empty() {
             String::new()
         } else {
@@ -74,6 +84,7 @@ impl JobRepository {
             r#"
             SELECT 
                 j.id, j.job_name, j.folder_name, j.application, j.sub_application,
+                COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
                 j.task_type, j.cyclic, j.node_id, j.cmdline,
                 (SELECT COUNT(*) FROM in_conditions WHERE job_id = j.id) as in_cond_count,
@@ -96,25 +107,29 @@ impl JobRepository {
         let jobs = stmt.query_map(
             rusqlite::params_from_iter(all_params),
             |row| {
+                let appl_type: String = row.get(5)?;
+                let appl_ver: String = row.get(6)?;
                 Ok(JobDetail {
                     id: row.get(0)?,
                     job_name: row.get(1)?,
                     folder_name: row.get(2)?,
                     application: row.get(3)?,
                     sub_application: row.get(4)?,
-                    description: row.get(5)?,
-                    owner: row.get(6)?,
-                    run_as: row.get(7)?,
-                    priority: row.get(8)?,
-                    critical: row.get::<_, i32>(9)? == 1,
-                    task_type: row.get(10)?,
-                    cyclic: row.get::<_, i32>(11)? == 1,
-                    node_id: row.get(12)?,
-                    cmdline: row.get(13)?,
-                    in_conditions_count: row.get(14)?,
-                    out_conditions_count: row.get(15)?,
-                    control_resources_count: row.get(16)?,
-                    variables_count: row.get(17)?,
+                    appl_type: if appl_type.is_empty() { None } else { Some(appl_type) },
+                    appl_ver: if appl_ver.is_empty() { None } else { Some(appl_ver) },
+                    description: row.get(7)?,
+                    owner: row.get(8)?,
+                    run_as: row.get(9)?,
+                    priority: row.get(10)?,
+                    critical: row.get::<_, i32>(11)? == 1,
+                    task_type: row.get(12)?,
+                    cyclic: row.get::<_, i32>(13)? == 1,
+                    node_id: row.get(14)?,
+                    cmdline: row.get(15)?,
+                    in_conditions_count: row.get(16)?,
+                    out_conditions_count: row.get(17)?,
+                    control_resources_count: row.get(18)?,
+                    variables_count: row.get(19)?,
                 })
             },
         )?
@@ -138,6 +153,7 @@ impl JobRepository {
             r#"
             SELECT 
                 j.id, j.job_name, j.folder_name, j.application, j.sub_application,
+                COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
                 j.task_type, j.cyclic, j.node_id, j.cmdline,
                 (SELECT COUNT(*) FROM in_conditions WHERE job_id = j.id),
@@ -149,25 +165,29 @@ impl JobRepository {
             "#,
             params![job_id],
             |row| {
+                let appl_type: String = row.get(5)?;
+                let appl_ver: String = row.get(6)?;
                 Ok(JobDetail {
                     id: row.get(0)?,
                     job_name: row.get(1)?,
                     folder_name: row.get(2)?,
                     application: row.get(3)?,
                     sub_application: row.get(4)?,
-                    description: row.get(5)?,
-                    owner: row.get(6)?,
-                    run_as: row.get(7)?,
-                    priority: row.get(8)?,
-                    critical: row.get::<_, i32>(9)? == 1,
-                    task_type: row.get(10)?,
-                    cyclic: row.get::<_, i32>(11)? == 1,
-                    node_id: row.get(12)?,
-                    cmdline: row.get(13)?,
-                    in_conditions_count: row.get(14)?,
-                    out_conditions_count: row.get(15)?,
-                    control_resources_count: row.get(16)?,
-                    variables_count: row.get(17)?,
+                    appl_type: if appl_type.is_empty() { None } else { Some(appl_type) },
+                    appl_ver: if appl_ver.is_empty() { None } else { Some(appl_ver) },
+                    description: row.get(7)?,
+                    owner: row.get(8)?,
+                    run_as: row.get(9)?,
+                    priority: row.get(10)?,
+                    critical: row.get::<_, i32>(11)? == 1,
+                    task_type: row.get(12)?,
+                    cyclic: row.get::<_, i32>(13)? == 1,
+                    node_id: row.get(14)?,
+                    cmdline: row.get(15)?,
+                    in_conditions_count: row.get(16)?,
+                    out_conditions_count: row.get(17)?,
+                    control_resources_count: row.get(18)?,
+                    variables_count: row.get(19)?,
                 })
             },
         ).optional()?;
@@ -416,11 +436,127 @@ impl JobRepository {
         let mut stmt = conn.prepare("SELECT DISTINCT owner FROM jobs WHERE owner IS NOT NULL ORDER BY owner")?;
         let owners = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
         
+        let mut stmt = conn.prepare("SELECT DISTINCT appl_type FROM jobs WHERE appl_type IS NOT NULL AND appl_type != '' ORDER BY appl_type")?;
+        let appl_types = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
+        
+        let mut stmt = conn.prepare("SELECT DISTINCT appl_ver FROM jobs WHERE appl_ver IS NOT NULL AND appl_ver != '' ORDER BY appl_ver")?;
+        let appl_vers = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
+        
         Ok(FilterOptions {
             applications,
             folders,
             task_types,
             owners,
+            appl_types,
+            appl_vers,
         })
+    }
+    
+    pub fn export_search_to_csv(&self, request: &JobSearchRequest) -> Result<String> {
+        let conn = self.conn.lock().unwrap();
+        
+        let mut where_clauses = Vec::new();
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        
+        if let Some(ref job_name) = request.job_name {
+            where_clauses.push("job_name LIKE ?");
+            params_vec.push(Box::new(format!("%{}%", job_name)));
+        }
+        
+        if let Some(ref folder_name) = request.folder_name {
+            where_clauses.push("folder_name LIKE ?");
+            params_vec.push(Box::new(format!("%{}%", folder_name)));
+        }
+        
+        if let Some(ref application) = request.application {
+            where_clauses.push("application = ?");
+            params_vec.push(Box::new(application.clone()));
+        }
+        
+        if let Some(critical) = request.critical {
+            where_clauses.push("critical = ?");
+            params_vec.push(Box::new(if critical { 1 } else { 0 }));
+        }
+        
+        if let Some(ref task_type) = request.task_type {
+            where_clauses.push("task_type = ?");
+            params_vec.push(Box::new(task_type.clone()));
+        }
+        
+        if let Some(ref appl_type) = request.appl_type {
+            where_clauses.push("appl_type = ?");
+            params_vec.push(Box::new(appl_type.clone()));
+        }
+        
+        if let Some(ref appl_ver) = request.appl_ver {
+            where_clauses.push("appl_ver = ?");
+            params_vec.push(Box::new(appl_ver.clone()));
+        }
+        
+        let where_clause = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_clauses.join(" AND "))
+        };
+        
+        let query = format!(
+            r#"
+            SELECT 
+                j.job_name, j.folder_name, j.application, j.sub_application,
+                COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
+                j.task_type, j.critical, j.cyclic, j.owner, j.priority,
+                j.description, j.cmdline
+            FROM jobs j
+            {}
+            ORDER BY j.job_name
+            "#,
+            where_clause
+        );
+        
+        let mut stmt = conn.prepare(&query)?;
+        let rows = stmt.query_map(
+            rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, i32>(7)?,
+                    row.get::<_, i32>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, Option<String>>(10)?,
+                    row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
+                ))
+            },
+        )?;
+        
+        let mut csv_output = String::from("Job Name,Folder,Application,Sub Application,APPL_TYPE,APPL_VER,Task Type,Critical,Cyclic,Owner,Priority,Description,Command Line\n");
+        
+        for row in rows {
+            let (job_name, folder, app, sub_app, appl_type, appl_ver, task_type, critical, cyclic, owner, priority, desc, cmdline) = row?;
+            csv_output.push_str(&format!(
+                "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
+                job_name,
+                folder.unwrap_or_default(),
+                app.unwrap_or_default(),
+                sub_app.unwrap_or_default(),
+                appl_type,
+                appl_ver,
+                task_type.unwrap_or_default(),
+                if critical == 1 { "Yes" } else { "No" },
+                if cyclic == 1 { "Yes" } else { "No" },
+                owner.unwrap_or_default(),
+                priority.unwrap_or_default(),
+                desc.unwrap_or_default().replace("\"", "\"\""),
+                cmdline.unwrap_or_default().replace("\"", "\"\""),
+            ));
+        }
+        
+        Ok(csv_output)
     }
 }

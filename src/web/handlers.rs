@@ -139,3 +139,19 @@ pub async fn get_filter_options(
         )),
     }
 }
+
+pub async fn export_jobs_csv(
+    query: web::Query<JobSearchRequest>,
+    repository: web::Data<Arc<JobRepository>>,
+    _auth: BearerAuth,
+) -> HttpResponse {
+    match repository.export_search_to_csv(&query.into_inner()) {
+        Ok(csv_data) => HttpResponse::Ok()
+            .content_type("text/csv")
+            .insert_header(("Content-Disposition", "attachment; filename=\"jobs_export.csv\""))
+            .body(csv_data),
+        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+            format!("Failed to export CSV: {}", e)
+        )),
+    }
+}
