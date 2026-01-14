@@ -436,7 +436,7 @@ impl JobRepository {
         let cyclic_jobs: u32 = conn.query_row("SELECT COUNT(*) FROM jobs WHERE cyclic = 1", [], |row| row.get(0))?;
         
         let file_transfer_jobs: u32 = conn.query_row(
-            "SELECT COUNT(*) FROM jobs WHERE task_type LIKE '%FileTransfer%' OR task_type LIKE '%FTP%' OR cmdline LIKE '%ftp%' OR cmdline LIKE '%sftp%'",
+            "SELECT COUNT(*) FROM jobs WHERE appl_type = 'FILE_TRANS' OR appl_type = 'FileWatch'",
             [],
             |row| row.get(0)
         )?;

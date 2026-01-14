@@ -95,16 +95,18 @@
             <!-- Dashboard Page -->
             <div id="dashboard-page" class="content-page active">
                 <div class="page-header">
-                    <h1>Dashboard</h1>
-                    <p>Overview of Control-M jobs and statistics</p>
+                    <h1><i class="fas fa-chart-line"></i> Migration Dashboard</h1>
+                    <p>Control-M Job Analysis & Migration Planning Overview</p>
                 </div>
+                
+                <!-- Key Metrics Grid -->
                 <div class="dashboard-grid">
                     <div class="stat-card">
                         <div class="stat-icon" style="background: #dbeafe;">
                             <i class="fas fa-tasks" style="color: #2563eb;"></i>
                         </div>
                         <div class="stat-content">
-                            <h3 id="total-jobs">0</h3>
+                            <h3 id="stat-total-jobs">0</h3>
                             <p>Total Jobs</p>
                         </div>
                     </div>
@@ -113,7 +115,7 @@
                             <i class="fas fa-folder" style="color: #f59e0b;"></i>
                         </div>
                         <div class="stat-content">
-                            <h3 id="total-folders">0</h3>
+                            <h3 id="stat-total-folders">0</h3>
                             <p>Total Folders</p>
                         </div>
                     </div>
@@ -122,7 +124,7 @@
                             <i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>
                         </div>
                         <div class="stat-content">
-                            <h3 id="critical-jobs">0</h3>
+                            <h3 id="stat-critical-jobs">0</h3>
                             <p>Critical Jobs</p>
                         </div>
                     </div>
@@ -131,8 +133,133 @@
                             <i class="fas fa-terminal" style="color: #10b981;"></i>
                         </div>
                         <div class="stat-content">
-                            <h3 id="cli-jobs">0</h3>
+                            <h3 id="stat-cli-jobs">0</h3>
                             <p>CLI Jobs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #e0e7ff;">
+                            <i class="fas fa-sync-alt" style="color: #6366f1;"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stat-cyclic-jobs">0</h3>
+                            <p>Cyclic Jobs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #fce7f3;">
+                            <i class="fas fa-exchange-alt" style="color: #ec4899;"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stat-file-transfer">0</h3>
+                            <p>File Transfer Jobs</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Migration Analysis Section -->
+                <div class="dashboard-section">
+                    <h2><i class="fas fa-chart-bar"></i> Migration Analysis</h2>
+                    <div class="dashboard-charts">
+                        <!-- Task Type Distribution -->
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3><i class="fas fa-tasks"></i> Task Type Distribution</h3>
+                                <p class="chart-subtitle">Job types requiring migration</p>
+                            </div>
+                            <div class="chart-body" id="chart-task-types">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Complexity Distribution -->
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3><i class="fas fa-layer-group"></i> Complexity Distribution</h3>
+                                <p class="chart-subtitle">Based on dependencies and resources</p>
+                            </div>
+                            <div class="chart-body" id="chart-complexity">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Applications & Folders -->
+                <div class="dashboard-section">
+                    <h2><i class="fas fa-sitemap"></i> Top Applications & Folders</h2>
+                    <div class="dashboard-charts">
+                        <!-- Top Applications -->
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3><i class="fas fa-cube"></i> Top 10 Applications</h3>
+                                <p class="chart-subtitle">Applications with most jobs</p>
+                            </div>
+                            <div class="chart-body" id="chart-applications">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Top Folders -->
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3><i class="fas fa-folder-open"></i> Top 10 Folders</h3>
+                                <p class="chart-subtitle">Folders with most jobs</p>
+                            </div>
+                            <div class="chart-body" id="chart-folders">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Migration Recommendations -->
+                <div class="dashboard-section">
+                    <h2><i class="fas fa-lightbulb"></i> Migration Recommendations</h2>
+                    <div class="recommendation-grid">
+                        <div class="recommendation-card">
+                            <div class="recommendation-icon" style="background: #dbeafe;">
+                                <i class="fas fa-check-circle" style="color: #2563eb;"></i>
+                            </div>
+                            <div class="recommendation-content">
+                                <h4>Start with Simple Jobs</h4>
+                                <p>Begin migration with jobs that have low complexity (few dependencies and resources)</p>
+                            </div>
+                        </div>
+                        <div class="recommendation-card">
+                            <div class="recommendation-icon" style="background: #fef3c7;">
+                                <i class="fas fa-exclamation-circle" style="color: #f59e0b;"></i>
+                            </div>
+                            <div class="recommendation-content">
+                                <h4>Review Critical Jobs</h4>
+                                <p>Critical jobs require extra attention and thorough testing during migration</p>
+                            </div>
+                        </div>
+                        <div class="recommendation-card">
+                            <div class="recommendation-icon" style="background: #fee2e2;">
+                                <i class="fas fa-project-diagram" style="color: #ef4444;"></i>
+                            </div>
+                            <div class="recommendation-content">
+                                <h4>Map Dependencies</h4>
+                                <p>Document all job dependencies before migration to ensure workflow continuity</p>
+                            </div>
+                        </div>
+                        <div class="recommendation-card">
+                            <div class="recommendation-icon" style="background: #dcfce7;">
+                                <i class="fas fa-code" style="color: #10b981;"></i>
+                            </div>
+                            <div class="recommendation-content">
+                                <h4>Analyze CLI Jobs</h4>
+                                <p>Command-line jobs may need script updates or containerization</p>
+                            </div>
                         </div>
                     </div>
                 </div>

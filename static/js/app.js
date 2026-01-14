@@ -39,8 +39,7 @@ async function fetchCurrentUser() {
                 userDisplay.textContent = currentUser.display_name || currentUser.username;
             }
             showPage('main-app');
-            loadFilterOptions();
-            performSearch();
+            switchContentPage('dashboard');
         } else {
             logout();
         }
@@ -62,7 +61,21 @@ function showPage(pageId) {
 
 // Event Listeners
 function initializeEventListeners() {
-    // Login tabs
+    initializeLoginListeners();
+    initializeNavigationListeners();
+    initializeSearchListeners();
+    initializeTableListeners();
+    initializeModalListeners();
+}
+
+function initializeLoginListeners() {
+    initializeLoginTabs();
+    initializeLoginForm();
+    initializeEntraLogin();
+    initializeLogout();
+}
+
+function initializeLoginTabs() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const tab = btn.dataset.tab;
@@ -72,51 +85,43 @@ function initializeEventListeners() {
             document.getElementById(`${tab}-login`).classList.add('active');
         });
     });
+}
 
-    // Login form
-    
-    // Login button click handler
-    console.log('🔧 [INIT] Setting up login button listener...');
-    const loginBtn = document.getElementById('login-form');
-    console.log('[INIT] Login form found:', !!loginBtn);
-    if (loginBtn) {
-        loginBtn.addEventListener('submit', async (e) => {
-            console.log('🖱️ [EVENT] Form submitted!');
+function initializeLoginForm() {
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             await handleLogin(e);
         });
-        console.log('[INIT] ✅ Login form listener attached');
-    } else {
-        console.error('[INIT] ❌ Login form NOT found!');
     }
     
-    // Also handle Enter key in password field
-    console.log('[INIT] Setting up password field Enter key listener...');
     const passwordField = document.getElementById('password');
-    console.log('[INIT] Password field found:', !!passwordField);
     if (passwordField) {
         passwordField.addEventListener('keypress', async (e) => {
-            console.log('⌨️ [EVENT] Key pressed in password field:', e.key);
             if (e.key === 'Enter') {
-                console.log('[EVENT] Enter key detected - calling handleLogin');
                 e.preventDefault();
                 await handleLogin(e);
             }
         });
-        console.log('[INIT] ✅ Password field listener attached');
-    } else {
-        console.error('[INIT] ❌ Password field NOT found!');
     }
-    // Entra ID login button
+}
+
+function initializeEntraLogin() {
     const entraLoginBtn = document.getElementById('entra-login-btn');
     if (entraLoginBtn) {
         entraLoginBtn.addEventListener('click', handleEntraLogin);
     }
-    
-    // Logout button
-    document.getElementById('logout-btn').addEventListener('click', logout);
-    
-    // Navigation
+}
+
+function initializeLogout() {
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
+}
+
+function initializeNavigationListeners() {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
@@ -124,38 +129,48 @@ function initializeEventListeners() {
             switchContentPage(page);
         });
     });
+}
+
+function initializeSearchListeners() {
+    const searchBtn = document.getElementById('search-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const exportBtn = document.getElementById('export-csv-btn');
+    const perPageSelect = document.getElementById('per-page');
     
-    // Search and filters
-    document.getElementById('search-btn').addEventListener('click', performSearch);
-    document.getElementById('reset-btn').addEventListener('click', resetFilters);
-    document.getElementById('export-csv-btn').addEventListener('click', exportToCSV);
-    document.getElementById('per-page').addEventListener('change', (e) => {
-        currentPerPage = parseInt(e.target.value);
-        performSearch();
-    });
-    
-    // Table sorting
-    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
-        th.addEventListener('click', () => {
-            const sortBy = th.dataset.sort;
-            if (currentSort.by === sortBy) {
-                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSort.by = sortBy;
-                currentSort.order = 'asc';
-            }
+    if (searchBtn) searchBtn.addEventListener('click', performSearch);
+    if (resetBtn) resetBtn.addEventListener('click', resetFilters);
+    if (exportBtn) exportBtn.addEventListener('click', exportToCSV);
+    if (perPageSelect) {
+        perPageSelect.addEventListener('change', (e) => {
+            currentPerPage = parseInt(e.target.value);
             performSearch();
         });
-    });
-    
-    // Modal close
-    document.querySelectorAll('.modal-close').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+    }
+}
+
+function initializeTableListeners() {
+    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+            handleTableSort(th.dataset.sort);
         });
     });
+}
+
+function handleTableSort(sortBy) {
+    if (currentSort.by === sortBy) {
+        currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.by = sortBy;
+        currentSort.order = 'asc';
+    }
+    performSearch();
+}
+
+function initializeModalListeners() {
+    document.querySelectorAll('.modal-close').forEach(btn => {
+        btn.addEventListener('click', closeAllModals);
+    });
     
-    // Click outside modal to close
     document.querySelectorAll('.modal').forEach(modal => {
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
@@ -163,6 +178,10 @@ function initializeEventListeners() {
             }
         });
     });
+}
+
+function closeAllModals() {
+    document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
 }
 
 async function handleLogin(e) {
@@ -223,7 +242,7 @@ async function handleLogin(e) {
             console.log('[LOGIN] Token saved:', authToken.substring(0, 20) + '...');
             console.log('[LOGIN] User:', currentUser);
             
-            const userDisplayElement = document.getElementById('user-display-name');
+            const userDisplayElement = document.getElementById('current-user');
             if (userDisplayElement) {
                 userDisplayElement.textContent = currentUser.display_name || currentUser.username;
                 console.log('[LOGIN] User display updated');
@@ -333,12 +352,23 @@ async function loadDashboard() {
             console.log(`  - CLI Jobs: ${stats.cli_jobs}`);
             
             console.log('🎨 [DASHBOARD] Updating stat cards...');
-            document.getElementById('stat-total-jobs').textContent = stats.total_jobs.toLocaleString();
-            document.getElementById('stat-total-folders').textContent = stats.total_folders.toLocaleString();
-            document.getElementById('stat-critical-jobs').textContent = stats.critical_jobs.toLocaleString();
-            document.getElementById('stat-cyclic-jobs').textContent = stats.cyclic_jobs.toLocaleString();
-            document.getElementById('stat-file-transfer').textContent = stats.file_transfer_jobs.toLocaleString();
-            document.getElementById('stat-cli-jobs').textContent = stats.cli_jobs.toLocaleString();
+            const statElements = {
+                'stat-total-jobs': stats.total_jobs,
+                'stat-total-folders': stats.total_folders,
+                'stat-critical-jobs': stats.critical_jobs,
+                'stat-cyclic-jobs': stats.cyclic_jobs,
+                'stat-file-transfer': stats.file_transfer_jobs,
+                'stat-cli-jobs': stats.cli_jobs
+            };
+            
+            for (const [id, value] of Object.entries(statElements)) {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.textContent = value.toLocaleString();
+                } else {
+                    console.warn(`[DASHBOARD] Element not found: ${id}`);
+                }
+            }
             
             console.log('📊 [DASHBOARD] Rendering charts...');
             renderBarChart('chart-applications', stats.jobs_by_application, 'application', 'count');
@@ -348,9 +378,12 @@ async function loadDashboard() {
             
             const endTime = performance.now();
             console.log(`✅ [DASHBOARD] Dashboard loaded in ${(endTime - startTime).toFixed(2)}ms`);
+        } else {
+            console.error('❌ [DASHBOARD] API returned error:', result.error);
         }
     } catch (error) {
         console.error('❌ [DASHBOARD] Failed to load dashboard:', error);
+        console.error('Error details:', error.stack);
     }
 }
 
@@ -604,10 +637,12 @@ function renderJobsTable(data) {
     
     if (data.jobs.length === 0) {
         tbody.innerHTML = '<tr><td colspan="14" class="text-center">No jobs found</td></tr>';
+        updateResultsInfo({ jobs: [], total: 0 });
         return;
     }
     
     tbody.innerHTML = data.jobs.map(renderJobRow).join('');
+    updateResultsInfo(data);
     renderPagination(data);
     initializeTableFeatures();
     console.log('[TABLE] Table rendered successfully');
@@ -616,7 +651,13 @@ function renderJobsTable(data) {
 function updateResultsInfo(data) {
     const resultsInfo = document.getElementById('results-info');
     if (resultsInfo) {
-        resultsInfo.textContent = `Showing ${data.jobs.length} of ${data.total} results`;
+        if (data.total === 0) {
+            resultsInfo.textContent = 'No results found';
+        } else {
+            const start = ((data.page - 1) * data.per_page) + 1;
+            const end = Math.min(start + data.jobs.length - 1, data.total);
+            resultsInfo.textContent = `Showing ${start}-${end} of ${data.total.toLocaleString()} results`;
+        }
     }
     
     // Update page stats

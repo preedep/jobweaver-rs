@@ -28,5 +28,5 @@ target
 /datasource
 /output
 /README.md.backup
-/controlm.db
+/*.db
 /static/index.html.new
