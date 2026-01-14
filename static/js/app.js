@@ -74,8 +74,39 @@ function initializeEventListeners() {
     });
 
     // Login form
-    document.getElementById('login-form').addEventListener('submit', handleLogin);
     
+    // Login button click handler
+    console.log('🔧 [INIT] Setting up login button listener...');
+    const loginBtn = document.getElementById('login-form');
+    console.log('[INIT] Login form found:', !!loginBtn);
+    if (loginBtn) {
+        loginBtn.addEventListener('submit', async (e) => {
+            console.log('🖱️ [EVENT] Form submitted!');
+            e.preventDefault();
+            await handleLogin(e);
+        });
+        console.log('[INIT] ✅ Login form listener attached');
+    } else {
+        console.error('[INIT] ❌ Login form NOT found!');
+    }
+    
+    // Also handle Enter key in password field
+    console.log('[INIT] Setting up password field Enter key listener...');
+    const passwordField = document.getElementById('password');
+    console.log('[INIT] Password field found:', !!passwordField);
+    if (passwordField) {
+        passwordField.addEventListener('keypress', async (e) => {
+            console.log('⌨️ [EVENT] Key pressed in password field:', e.key);
+            if (e.key === 'Enter') {
+                console.log('[EVENT] Enter key detected - calling handleLogin');
+                e.preventDefault();
+                await handleLogin(e);
+            }
+        });
+        console.log('[INIT] ✅ Password field listener attached');
+    } else {
+        console.error('[INIT] ❌ Password field NOT found!');
+    }
     // Entra ID login button
     const entraLoginBtn = document.getElementById('entra-login-btn');
     if (entraLoginBtn) {
@@ -135,14 +166,39 @@ function initializeEventListeners() {
 }
 
 async function handleLogin(e) {
-    e.preventDefault();
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
+    console.log('🔐 [LOGIN] ========== LOGIN FUNCTION CALLED ==========');
+    console.log('[LOGIN] Event:', e);
+    
+    if (e) {
+        e.preventDefault();
+        console.log('[LOGIN] preventDefault() called');
+    }
+    
+    const username = document.getElementById('username')?.value;
+    const password = document.getElementById('password')?.value;
     const errorDiv = document.getElementById('login-error');
     
-    errorDiv.style.display = 'none';
+    console.log('[LOGIN] Username field value:', username);
+    console.log('[LOGIN] Password field exists:', !!password);
+    console.log('[LOGIN] Error div exists:', !!errorDiv);
+    
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+    }
+    
+    if (!username || !password) {
+        console.error('[LOGIN] ❌ Missing credentials');
+        if (errorDiv) {
+            errorDiv.textContent = 'Please enter both username and password';
+            errorDiv.style.display = 'block';
+        }
+        return false;
+    }
     
     try {
+        console.log('[LOGIN] 🌐 Sending POST request to:', `${API_BASE}/auth/login`);
+        console.log('[LOGIN] Request body:', { username, password: '***' });
+        
         const response = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
             headers: {
@@ -151,32 +207,51 @@ async function handleLogin(e) {
             body: JSON.stringify({ username, password })
         });
         
+        console.log('[LOGIN] 📡 Response status:', response.status);
+        console.log('[LOGIN] Response ok:', response.ok);
+        
         const result = await response.json();
+        console.log('[LOGIN] 📦 Response data:', result);
         
         if (result.success && result.data) {
+            console.log('[LOGIN] ✅ Login successful!');
             authToken = result.data.token;
             currentUser = result.data.user || { username: username, display_name: username };
             localStorage.setItem('authToken', authToken);
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
             
-            const userDisplay = document.getElementById('current-user');
-            if (userDisplay) {
-                userDisplay.textContent = currentUser.display_name || currentUser.username;
+            console.log('[LOGIN] Token saved:', authToken.substring(0, 20) + '...');
+            console.log('[LOGIN] User:', currentUser);
+            
+            const userDisplayElement = document.getElementById('user-display-name');
+            if (userDisplayElement) {
+                userDisplayElement.textContent = currentUser.display_name || currentUser.username;
+                console.log('[LOGIN] User display updated');
             }
             
+            console.log('[LOGIN] Switching to main-app...');
             showPage('main-app');
-            loadFilterOptions();
-            performSearch();
+            switchContentPage('dashboard');
+            console.log('[LOGIN] ✅ Login complete!');
         } else {
-            errorDiv.textContent = result.error || 'Login failed';
-            errorDiv.style.display = 'block';
+            console.error('[LOGIN] ❌ Login failed:', result.error);
+            if (errorDiv) {
+                errorDiv.textContent = result.error || 'Invalid username or password';
+                errorDiv.style.display = 'block';
+            }
         }
     } catch (error) {
-        console.error('Login error:', error);
-        errorDiv.textContent = 'Network error. Please try again.';
-        errorDiv.style.display = 'block';
+        console.error('[LOGIN] 💥 Exception:', error);
+        console.error('[LOGIN] Error stack:', error.stack);
+        if (errorDiv) {
+            errorDiv.textContent = 'Connection error. Please try again.';
+            errorDiv.style.display = 'block';
+        }
     }
+    
+    console.log('[LOGIN] ========== LOGIN FUNCTION END ==========');
+    return false;
 }
-
 async function handleEntraLogin() {
     const errorDiv = document.getElementById('login-error');
     
@@ -1174,3 +1249,63 @@ window.fitGraphToScreen = fitGraphToScreen;
 window.zoomIn = zoomIn;
 window.zoomOut = zoomOut;
 window.resetGraph = resetGraph;
+
+// Filter collapse toggle
+document.addEventListener('DOMContentLoaded', () => {
+    const toggleBtn = document.getElementById('toggle-filters');
+    const filterBody = document.getElementById('filter-body');
+    
+    if (toggleBtn && filterBody) {
+        toggleBtn.addEventListener('click', () => {
+            filterBody.classList.toggle('collapsed');
+            toggleBtn.classList.toggle('collapsed');
+        });
+    }
+});
+
+// Update stats
+function updatePageStats(total, filtered) {
+    const totalStat = document.getElementById('total-jobs-stat');
+    const filteredStat = document.getElementById('filtered-jobs-stat');
+    
+    if (totalStat) totalStat.textContent = total.toLocaleString();
+    if (filteredStat) filteredStat.textContent = filtered.toLocaleString();
+}
+
+// Show active filters
+function showActiveFilters() {
+    const activeFiltersDiv = document.getElementById('active-filters');
+    const filterChipsDiv = document.getElementById('filter-chips');
+    
+    if (!activeFiltersDiv || !filterChipsDiv) return;
+    
+    const chips = [];
+    
+    if (currentFilters.job_name) {
+        chips.push(`Job: "${currentFilters.job_name}"`);
+    }
+    if (currentFilters.folder_name) {
+        chips.push(`Folder: ${currentFilters.folder_name}`);
+    }
+    if (currentFilters.application) {
+        chips.push(`App: ${currentFilters.application}`);
+    }
+    if (currentFilters.task_type) {
+        chips.push(`Task: ${currentFilters.task_type}`);
+    }
+    if (currentFilters.critical !== undefined) {
+        chips.push(`Critical: ${currentFilters.critical ? 'Yes' : 'No'}`);
+    }
+    if (currentFilters.min_dependencies) {
+        chips.push(`Min Deps: ${currentFilters.min_dependencies}`);
+    }
+    
+    if (chips.length > 0) {
+        filterChipsDiv.innerHTML = chips.map(chip => 
+            `<span class="filter-chip">${chip}</span>`
+        ).join('');
+        activeFiltersDiv.style.display = 'flex';
+    } else {
+        activeFiltersDiv.style.display = 'none';
+    }
+}
