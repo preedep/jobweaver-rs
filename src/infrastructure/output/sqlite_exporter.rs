@@ -222,13 +222,17 @@ impl SqliteExporter {
             -- Full-text search support for job_name (using trigram for LIKE queries)
             CREATE INDEX IF NOT EXISTS idx_jobs_name ON jobs(job_name);
             
-            -- Foreign key indexes
+            -- Foreign key indexes for all child tables
             CREATE INDEX IF NOT EXISTS idx_in_conditions_job ON in_conditions(job_id);
             CREATE INDEX IF NOT EXISTS idx_out_conditions_job ON out_conditions(job_id);
+            CREATE INDEX IF NOT EXISTS idx_on_conditions_job ON on_conditions(job_id);
+            CREATE INDEX IF NOT EXISTS idx_do_actions_on_condition ON do_actions(on_condition_id);
             CREATE INDEX IF NOT EXISTS idx_control_resources_job ON control_resources(job_id);
             CREATE INDEX IF NOT EXISTS idx_quantitative_resources_job ON quantitative_resources(job_id);
             CREATE INDEX IF NOT EXISTS idx_job_scheduling_job ON job_scheduling(job_id);
             CREATE INDEX IF NOT EXISTS idx_job_variables_job ON job_variables(job_id);
+            CREATE INDEX IF NOT EXISTS idx_job_auto_edits_job ON job_auto_edits(job_id);
+            CREATE INDEX IF NOT EXISTS idx_job_metadata_job ON job_metadata(job_id);
             "#
         ).context("Failed to create database schema")?;
 

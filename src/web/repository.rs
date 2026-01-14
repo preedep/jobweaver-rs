@@ -164,11 +164,21 @@ impl JobRepository {
         params_vec: &[Box<dyn rusqlite::ToSql>]
     ) -> Result<u32> {
         let count_query = format!("SELECT COUNT(*) FROM jobs j {}", where_clause);
+        tracing::info!("🔢 [COUNT] Executing count query: {}", count_query);
+        tracing::debug!("🔢 [COUNT] With {} parameters", params_vec.len());
+        
+        let start = std::time::Instant::now();
         let total: u32 = conn.query_row(
             &count_query,
             rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
             |row| row.get(0),
-        )?;
+        ).map_err(|e| {
+            tracing::error!("❌ [COUNT] Query failed: {}", e);
+            e
+        })?;
+        
+        let duration = start.elapsed();
+        tracing::info!("✅ [COUNT] Query completed in {:?}, found {} jobs", duration, total);
         Ok(total)
     }
     
