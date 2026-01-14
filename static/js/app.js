@@ -1065,27 +1065,35 @@ function renderJobGraph(graphData) {
     document.getElementById('stat-deps-in').textContent = depsIn;
     document.getElementById('stat-deps-out').textContent = depsOut;
     
-    const nodes = new vis.DataSet(graphData.nodes.map(node => ({
-        id: node.id,
-        label: node.label,
-        color: {
-            background: node.color,
-            border: node.is_current ? '#2d5016' : (node.color === '#2196F3' ? '#0d47a1' : '#e65100'),
-            highlight: {
+    const nodes = new vis.DataSet(graphData.nodes.map(node => {
+        // Build tooltip with description
+        let tooltip = `<b>${escapeHtml(node.label)}</b><br/>Folder: ${escapeHtml(node.folder)}`;
+        if (node.description) {
+            tooltip += `<br/><br/><i>${escapeHtml(node.description)}</i>`;
+        }
+        
+        return {
+            id: node.id,
+            label: node.label,
+            color: {
                 background: node.color,
-                border: '#000000'
-            }
-        },
-        font: { 
-            size: 16, 
-            color: '#ffffff',
-            face: 'Arial',
-            bold: node.is_current
-        },
-        title: `<b>${node.label}</b><br/>Folder: ${node.folder}`,
-        borderWidth: node.is_current ? 4 : 2,
-        shadow: true
-    })));
+                border: node.is_current ? '#2d5016' : (node.color === '#2196F3' ? '#0d47a1' : '#e65100'),
+                highlight: {
+                    background: node.color,
+                    border: '#000000'
+                }
+            },
+            font: { 
+                size: 16, 
+                color: '#ffffff',
+                face: 'Arial',
+                bold: node.is_current
+            },
+            title: tooltip,
+            borderWidth: node.is_current ? 4 : 2,
+            shadow: true
+        };
+    }));
     
     const edges = new vis.DataSet(graphData.edges.map(edge => ({
         from: edge.from,
@@ -1111,16 +1119,24 @@ function renderJobGraph(graphData) {
     
     const options = {
         layout: {
-            hierarchical: {
-                direction: 'UD',
-                sortMethod: 'directed',
-                nodeSpacing: 200,
-                levelSeparation: 250,
-                treeSpacing: 250
-            }
+            randomSeed: 42,
+            improvedLayout: true
         },
         physics: {
-            enabled: false
+            enabled: true,
+            stabilization: {
+                enabled: true,
+                iterations: 200,
+                updateInterval: 25
+            },
+            barnesHut: {
+                gravitationalConstant: -8000,
+                centralGravity: 0.3,
+                springLength: 200,
+                springConstant: 0.04,
+                damping: 0.09,
+                avoidOverlap: 0.5
+            }
         },
         interaction: {
             dragNodes: true,
