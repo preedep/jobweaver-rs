@@ -409,6 +409,18 @@
                                     <input type="number" id="filter-max-deps" placeholder="Max" min="0" class="input-modern">
                                 </div>
                                 <div class="form-group-modern">
+                                    <label for="filter-min-on-conds">
+                                        <i class="fas fa-arrow-down"></i> Min ON Conditions
+                                    </label>
+                                    <input type="number" id="filter-min-on-conds" placeholder="Min" min="0" class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-max-on-conds">
+                                        <i class="fas fa-arrow-up"></i> Max ON Conditions
+                                    </label>
+                                    <input type="number" id="filter-max-on-conds" placeholder="Max" min="0" class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
                                     <label for="filter-has-variables">
                                         <i class="fas fa-dollar-sign"></i> Has Variables
                                     </label>
@@ -480,12 +492,13 @@
                                     <th>Variables</th>
                                     <th>In Deps</th>
                                     <th>Out Deps</th>
+                                    <th>ON Conds</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="jobs-table-body">
                                 <tr>
-                                    <td colspan="14" class="text-center">
+                                    <td colspan="15" class="text-center">
                                         <div class="loading-state">
                                             <i class="fas fa-spinner fa-spin"></i> Loading...
                                         </div>

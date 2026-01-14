@@ -50,72 +50,99 @@ impl JobRepository {
         })
     }
     
+    fn add_string_filter(
+        &self,
+        clauses: &mut Vec<&'static str>,
+        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        value: &Option<String>,
+        column: &'static str,
+        operator: &str,
+        filter_name: &str,
+    ) {
+        if let Some(ref val) = value {
+            tracing::debug!("  ➕ Adding {} filter: {}", filter_name, val);
+            if operator == "LIKE" {
+                clauses.push(column);
+                params.push(Box::new(format!("%{}%", val)));
+            } else {
+                clauses.push(column);
+                params.push(Box::new(val.clone()));
+            }
+        }
+    }
+
+    fn add_count_filter(
+        &self,
+        clauses: &mut Vec<&'static str>,
+        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        value: Option<i32>,
+        table: &'static str,
+        operator: &str,
+        filter_name: &str,
+        use_info_log: bool,
+    ) {
+        if let Some(val) = value {
+            if use_info_log {
+                tracing::info!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
+            } else {
+                tracing::debug!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
+            }
+            clauses.push(table);
+            params.push(Box::new(val));
+        }
+    }
+
     fn build_where_clause(&self, request: &JobSearchRequest) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
+        tracing::debug!("🔨 [WHERE] Building WHERE clause for search");
         let mut where_clauses = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         
-        if let Some(ref job_name) = request.job_name {
-            where_clauses.push("j.job_name LIKE ?");
-            params_vec.push(Box::new(format!("%{}%", job_name)));
-        }
+        // Basic string filters
+        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.job_name, "j.job_name LIKE ?", "LIKE", "job_name");
+        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.folder_name, "j.folder_name LIKE ?", "LIKE", "folder_name");
+        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.application, "j.application = ?", "=", "application");
+        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.task_type, "j.task_type = ?", "=", "task_type");
+        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.appl_type, "j.appl_type = ?", "=", "appl_type");
+        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.appl_ver, "j.appl_ver = ?", "=", "appl_ver");
         
-        if let Some(ref folder_name) = request.folder_name {
-            where_clauses.push("j.folder_name LIKE ?");
-            params_vec.push(Box::new(format!("%{}%", folder_name)));
-        }
-        
-        if let Some(ref application) = request.application {
-            where_clauses.push("j.application = ?");
-            params_vec.push(Box::new(application.clone()));
-        }
-        
+        // Critical filter
         if let Some(critical) = request.critical {
+            tracing::debug!("  ➕ Adding critical filter: {}", critical);
             where_clauses.push("j.critical = ?");
             params_vec.push(Box::new(if critical { 1 } else { 0 }));
         }
         
-        if let Some(ref task_type) = request.task_type {
-            where_clauses.push("j.task_type = ?");
-            params_vec.push(Box::new(task_type.clone()));
-        }
+        // Dependency count filters
+        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_dependencies,
+            "(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) >= ?", ">=", "min_dependencies", false);
+        self.add_count_filter(&mut where_clauses, &mut params_vec, request.max_dependencies,
+            "(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) <= ?", "<=", "max_dependencies", false);
         
-        if let Some(ref appl_type) = request.appl_type {
-            where_clauses.push("j.appl_type = ?");
-            params_vec.push(Box::new(appl_type.clone()));
-        }
+        // ON conditions count filters (use info log)
+        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_on_conditions,
+            "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) >= ?", ">=", "min_on_conditions", true);
+        self.add_count_filter(&mut where_clauses, &mut params_vec, request.max_on_conditions,
+            "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) <= ?", "<=", "max_on_conditions", true);
         
-        if let Some(ref appl_ver) = request.appl_ver {
-            where_clauses.push("j.appl_ver = ?");
-            params_vec.push(Box::new(appl_ver.clone()));
-        }
-        
-        if let Some(min_deps) = request.min_dependencies {
-            where_clauses.push("(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) >= ?");
-            params_vec.push(Box::new(min_deps));
-        }
-        
-        if let Some(max_deps) = request.max_dependencies {
-            where_clauses.push("(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) <= ?");
-            params_vec.push(Box::new(max_deps));
-        }
-        
+        // Variable filters
         if let Some(has_vars) = request.has_variables {
+            tracing::debug!("  ➕ Adding has_variables filter: {}", has_vars);
             if has_vars {
                 where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) > 0");
             } else {
                 where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) = 0");
             }
         }
-        
-        if let Some(min_vars) = request.min_variables {
-            where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) >= ?");
-            params_vec.push(Box::new(min_vars));
-        }
+        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_variables,
+            "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) >= ?", ">=", "min_variables", false);
         
         let where_clause = if where_clauses.is_empty() {
+            tracing::info!("🔨 [WHERE] No filters applied - returning all jobs");
             String::new()
         } else {
-            format!("WHERE {}", where_clauses.join(" AND "))
+            let clause = format!("WHERE {}", where_clauses.join(" AND "));
+            tracing::info!("🔨 [WHERE] Built clause with {} conditions: {}", where_clauses.len(), clause);
+            clause
         };
         
         (where_clause, params_vec)
@@ -164,6 +191,7 @@ impl JobRepository {
                 j.task_type, j.cyclic, j.node_id, j.cmdline,
                 (SELECT COUNT(*) FROM in_conditions WHERE job_id = j.id) as in_cond_count,
                 (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id) as out_cond_count,
+                (SELECT COUNT(*) FROM on_conditions WHERE job_id = j.id) as on_cond_count,
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id) as ctrl_res_count,
                 (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) as var_count
             FROM jobs j
@@ -211,8 +239,9 @@ impl JobRepository {
             cmdline: row.get(15)?,
             in_conditions_count: row.get(16)?,
             out_conditions_count: row.get(17)?,
-            control_resources_count: row.get(18)?,
-            variables_count: row.get(19)?,
+            on_conditions_count: row.get(18)?,
+            control_resources_count: row.get(19)?,
+            variables_count: row.get(20)?,
         })
     }
 
@@ -228,6 +257,7 @@ impl JobRepository {
                 j.task_type, j.cyclic, j.node_id, j.cmdline,
                 (SELECT COUNT(*) FROM in_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id),
+                (SELECT COUNT(*) FROM on_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id)
             FROM jobs j
@@ -256,8 +286,9 @@ impl JobRepository {
                     cmdline: row.get(15)?,
                     in_conditions_count: row.get(16)?,
                     out_conditions_count: row.get(17)?,
-                    control_resources_count: row.get(18)?,
-                    variables_count: row.get(19)?,
+                    on_conditions_count: row.get(18)?,
+                    control_resources_count: row.get(19)?,
+                    variables_count: row.get(20)?,
                 })
             },
         ).optional()?;

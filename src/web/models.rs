@@ -42,6 +42,8 @@ pub struct JobSearchRequest {
     pub critical: Option<bool>,
     pub min_dependencies: Option<i32>,
     pub max_dependencies: Option<i32>,
+    pub min_on_conditions: Option<i32>,
+    pub max_on_conditions: Option<i32>,
     pub has_variables: Option<bool>,
     pub min_variables: Option<i32>,
     pub page: Option<u32>,
@@ -86,6 +88,7 @@ pub struct JobDetail {
     pub cmdline: Option<String>,
     pub in_conditions_count: u32,
     pub out_conditions_count: u32,
+    pub on_conditions_count: u32,
     pub control_resources_count: u32,
     pub variables_count: u32,
 }

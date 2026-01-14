@@ -508,6 +508,69 @@ function populateSelect(selectId, options) {
     select.value = currentValue;
 }
 
+function collectFilterValues() {
+    return {
+        jobName: document.getElementById('filter-job-name')?.value?.trim(),
+        folderName: $('#filter-folder').val(),
+        application: $('#filter-application').val(),
+        applType: $('#filter-appl-type').val(),
+        applVer: $('#filter-appl-ver').val(),
+        taskType: $('#filter-task-type').val(),
+        critical: document.getElementById('filter-critical')?.value,
+        minDeps: document.getElementById('filter-min-deps')?.value?.trim(),
+        maxDeps: document.getElementById('filter-max-deps')?.value?.trim(),
+        minOnConds: document.getElementById('filter-min-on-conds')?.value?.trim(),
+        maxOnConds: document.getElementById('filter-max-on-conds')?.value?.trim(),
+        hasVars: document.getElementById('filter-has-variables')?.value,
+        minVars: document.getElementById('filter-min-variables')?.value?.trim()
+    };
+}
+
+function buildFiltersObject(values) {
+    const filters = {};
+    
+    if (values.jobName) filters.job_name = values.jobName;
+    if (values.folderName) filters.folder_name = values.folderName;
+    if (values.application) filters.application = values.application;
+    if (values.applType) filters.appl_type = values.applType;
+    if (values.applVer) filters.appl_ver = values.applVer;
+    if (values.taskType) filters.task_type = values.taskType;
+    if (values.critical && values.critical !== '') filters.critical = values.critical === 'true';
+    if (values.minDeps) filters.min_dependencies = parseInt(values.minDeps);
+    if (values.maxDeps) filters.max_dependencies = parseInt(values.maxDeps);
+    if (values.minOnConds) filters.min_on_conditions = parseInt(values.minOnConds);
+    if (values.maxOnConds) filters.max_on_conditions = parseInt(values.maxOnConds);
+    if (values.hasVars && values.hasVars !== '') filters.has_variables = values.hasVars === 'true';
+    if (values.minVars) filters.min_variables = parseInt(values.minVars);
+    
+    return filters;
+}
+
+async function executeSearchRequest(filters) {
+    const response = await fetch(`${API_BASE}/jobs/search`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            ...filters,
+            page: currentPage,
+            per_page: currentPerPage,
+            sort_by: currentSort.by,
+            sort_order: currentSort.order
+        })
+    });
+    
+    const result = await response.json();
+    
+    if (!result.success) {
+        throw new Error(result.error || 'Search failed');
+    }
+    
+    return result.data;
+}
+
 function resetFilters() {
     console.log('🔄 [SEARCH] Resetting all filters');
     document.getElementById('filter-job-name').value = '';
@@ -519,6 +582,8 @@ function resetFilters() {
     document.getElementById('filter-critical').value = '';
     document.getElementById('filter-min-deps').value = '';
     document.getElementById('filter-max-deps').value = '';
+    document.getElementById('filter-min-on-conds').value = '';
+    document.getElementById('filter-max-on-conds').value = '';
     document.getElementById('filter-has-variables').value = '';
     document.getElementById('filter-min-variables').value = '';
     currentPage = 1;
@@ -529,81 +594,36 @@ async function performSearch() {
     const startTime = performance.now();
     console.log('🔍 [SEARCH] Starting search operation...');
     
-    showLoading(true); console.log("[SEARCH] Starting search...");
-    
-    currentFilters = {};
-    
-    // Get filter values (use jQuery for Select2 dropdowns)
-    const jobName = document.getElementById('filter-job-name')?.value?.trim();
-    const folderName = $('#filter-folder').val(); // Select2
-    const application = $('#filter-application').val(); // Select2
-    const applType = $('#filter-appl-type').val(); // Select2
-    const applVer = $('#filter-appl-ver').val(); // Select2
-    const taskType = $('#filter-task-type').val(); // Select2
-    const critical = document.getElementById('filter-critical')?.value;
-    const minDeps = document.getElementById('filter-min-deps')?.value?.trim();
-    const maxDeps = document.getElementById('filter-max-deps')?.value?.trim();
-    const hasVars = document.getElementById('filter-has-variables')?.value;
-    const minVars = document.getElementById('filter-min-variables')?.value?.trim();
-    
-    console.log('🔍 [SEARCH] Raw filter values:', {
-        jobName, folderName, application, applType, applVer, taskType, 
-        critical, minDeps, maxDeps, hasVars, minVars
-    });
-    
-    // Build filters object
-    if (jobName) currentFilters.job_name = jobName;
-    if (folderName) currentFilters.folder_name = folderName;
-    if (application) currentFilters.application = application;
-    if (applType) currentFilters.appl_type = applType;
-    if (applVer) currentFilters.appl_ver = applVer;
-    if (taskType) currentFilters.task_type = taskType;
-    if (critical && critical !== '') currentFilters.critical = critical === 'true';
-    if (minDeps) currentFilters.min_dependencies = parseInt(minDeps);
-    if (maxDeps) currentFilters.max_dependencies = parseInt(maxDeps);
-    if (hasVars && hasVars !== '') currentFilters.has_variables = hasVars === 'true';
-    if (minVars) currentFilters.min_variables = parseInt(minVars);
-    
-    console.log('📋 [SEARCH] Filters to send:', currentFilters);
-    console.log('📄 [SEARCH] Page:', currentPage, 'Per page:', currentPerPage);
+    showLoading(true);
     
     try {
+        // Collect and build filters
+        const filterValues = collectFilterValues();
+        console.log('🔍 [SEARCH] Raw filter values:', filterValues);
+        
+        currentFilters = buildFiltersObject(filterValues);
+        console.log('📋 [SEARCH] Filters to send:', currentFilters);
+        console.log('📄 [SEARCH] Page:', currentPage, 'Per page:', currentPerPage);
+        
+        // Execute search request
         console.log('🌐 [SEARCH] Sending API request...');
         const fetchStart = performance.now();
         
-        const response = await fetch(`${API_BASE}/jobs/search`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                ...currentFilters,
-                page: currentPage,
-                per_page: currentPerPage,
-                sort_by: currentSort.by,
-                sort_order: currentSort.order
-            })
-        });
+        const data = await executeSearchRequest(currentFilters);
         
         const fetchEnd = performance.now();
         console.log(`⏱️  [SEARCH] API response received in ${(fetchEnd - fetchStart).toFixed(2)}ms`);
+        console.log(`✅ [SEARCH] Found ${data.total} jobs (showing ${data.jobs.length})`);
         
-        console.log('📦 [SEARCH] Parsing response...');
-        const result = await response.json();
+        // Render results
+        console.log('🎨 [SEARCH] Rendering table...');
+        const renderStart = performance.now();
         
-        if (result.success) {
-            console.log(`✅ [SEARCH] Found ${result.data.total} jobs (showing ${result.data.jobs.length})`);
-            console.log('🎨 [SEARCH] Rendering table...');
-            const renderStart = performance.now();
-            
-            renderJobsTable(result.data);
-            
-            const renderEnd = performance.now();
-            console.log(`✅ [SEARCH] Table rendered in ${(renderEnd - renderStart).toFixed(2)}ms`);
-        } else {
-            console.error('❌ [SEARCH] Search failed:', result.error);
-        }
+        renderJobsTable(data);
+        
+        const renderEnd = performance.now();
+        console.log(`✅ [SEARCH] Table rendered in ${(renderEnd - renderStart).toFixed(2)}ms`);
+        
     } catch (error) {
         console.error('❌ [SEARCH] Error:', error);
     } finally {
@@ -636,7 +656,7 @@ function renderJobsTable(data) {
     }
     
     if (data.jobs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" class="text-center">No jobs found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="text-center">No jobs found</td></tr>';
         updateResultsInfo({ jobs: [], total: 0 });
         return;
     }
@@ -644,7 +664,6 @@ function renderJobsTable(data) {
     tbody.innerHTML = data.jobs.map(renderJobRow).join('');
     updateResultsInfo(data);
     renderPagination(data);
-    initializeTableFeatures();
     console.log('[TABLE] Table rendered successfully');
 }
 
@@ -692,6 +711,7 @@ function renderJobRow(job) {
             <td><span class="badge badge-info">${job.variables_count || 0}</span></td>
             <td><span class="badge badge-success">${job.in_conditions_count || 0}</span></td>
             <td><span class="badge badge-danger">${job.out_conditions_count || 0}</span></td>
+            <td><span class="badge badge-warning">${job.on_conditions_count || 0}</span></td>
             <td>
                 <button class="btn btn-icon" onclick="viewJobDetail(${job.id})" title="View Details">
                     <i class="fas fa-eye"></i>
@@ -1066,22 +1086,22 @@ function renderJobGraph(graphData) {
     document.getElementById('stat-deps-out').textContent = depsOut;
     
     const nodes = new vis.DataSet(graphData.nodes.map(node => {
-        // Build tooltip with application and description
+        // Build tooltip with application and description using newline characters
         let tooltipParts = [
-            `<b>${escapeHtml(node.label)}</b>`,
-            `Folder: ${escapeHtml(node.folder)}`
+            `${node.label}`,
+            `Folder: ${node.folder}`
         ];
         
         if (node.application) {
-            tooltipParts.push(`Application: ${escapeHtml(node.application)}`);
+            tooltipParts.push(`Application: ${node.application}`);
         }
         
         if (node.description) {
             tooltipParts.push('');  // Empty line for spacing
-            tooltipParts.push(`<i>${escapeHtml(node.description)}</i>`);
+            tooltipParts.push(`${node.description}`);
         }
         
-        const tooltip = tooltipParts.join('<br/>');
+        const tooltip = tooltipParts.join('\n');
         
         return {
             id: node.id,
@@ -1155,7 +1175,11 @@ function renderJobGraph(graphData) {
             zoomView: true,
             hover: true,
             tooltipDelay: 100,
-            navigationButtons: false
+            navigationButtons: false,
+            tooltip: {
+                enabled: true,
+                delay: 100
+            }
         },
         nodes: {
             shape: 'box',

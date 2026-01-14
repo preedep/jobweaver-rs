@@ -95,15 +95,28 @@ pub async fn search_jobs(
 ) -> HttpResponse {
     let request = query.into_inner();
     info!("🌐 [API] POST /jobs/search");
-    info!("📋 [API] Request body: job_name={:?}, folder={:?}, app={:?}, appl_type={:?}, appl_ver={:?}, task_type={:?}, critical={:?}",
+    info!("📋 [API] Basic filters: job_name={:?}, folder={:?}, app={:?}, appl_type={:?}, appl_ver={:?}, task_type={:?}, critical={:?}",
           request.job_name, request.folder_name, request.application, 
           request.appl_type, request.appl_ver, request.task_type, request.critical);
+    info!("📊 [API] Dependency filters: min_deps={:?}, max_deps={:?}, min_on_conds={:?}, max_on_conds={:?}",
+          request.min_dependencies, request.max_dependencies, request.min_on_conditions, request.max_on_conditions);
+    info!("💾 [API] Variable filters: has_vars={:?}, min_vars={:?}",
+          request.has_variables, request.min_variables);
+    info!("📄 [API] Pagination: page={:?}, per_page={:?}, sort_by={:?}, sort_order={:?}",
+          request.page, request.per_page, request.sort_by, request.sort_order);
     
     match repository.search_jobs(&request) {
-        Ok(response) => HttpResponse::Ok().json(ApiResponse::success(response)),
-        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-            format!("Failed to search jobs: {}", e)
-        )),
+        Ok(response) => {
+            info!("✅ [API] Search completed: found {} jobs (page {}/{})", 
+                  response.total, response.page, response.total_pages);
+            HttpResponse::Ok().json(ApiResponse::success(response))
+        },
+        Err(e) => {
+            error!("❌ [API] Search failed: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                format!("Failed to search jobs: {}", e)
+            ))
+        },
     }
 }
 
