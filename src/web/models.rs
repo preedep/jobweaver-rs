@@ -231,6 +231,7 @@ pub struct GraphNode {
     pub id: i64,
     pub label: String,
     pub folder: String,
+    pub application: Option<String>,
     pub description: Option<String>,
     pub color: String,
     pub is_current: bool,

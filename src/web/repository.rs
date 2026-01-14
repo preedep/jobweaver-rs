@@ -685,14 +685,15 @@ impl JobRepository {
         // Get the main job info
         tracing::debug!("[GRAPH] Querying main job info for job_id={}", job_id);
         let job = conn.query_row(
-            "SELECT id, job_name, folder_name, description FROM jobs WHERE id = ?",
+            "SELECT id, job_name, folder_name, application, description FROM jobs WHERE id = ?",
             [job_id],
             |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
-                    row.get::<_, Option<String>>(3)?
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?
                 ))
             }
         ).map_err(|e| {
@@ -711,7 +712,8 @@ impl JobRepository {
             id: job.0,
             label: job.1.clone(),
             folder: job.2.clone(),
-            description: job.3.clone(),
+            application: job.3.clone(),
+            description: job.4.clone(),
             color: "#4CAF50".to_string(),
             is_current: true,
         });
@@ -742,14 +744,15 @@ impl JobRepository {
                 .trim_end_matches("-NOTOK");
             
             let dep_job_result = conn.query_row(
-                "SELECT id, job_name, folder_name, description FROM jobs WHERE job_name = ? OR job_name = ? LIMIT 1",
+                "SELECT id, job_name, folder_name, application, description FROM jobs WHERE job_name = ? OR job_name = ? LIMIT 1",
                 [&cond_name, base_name],
                 |row| {
                     Ok((
                         row.get::<_, i64>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
-                        row.get::<_, Option<String>>(3)?
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?
                     ))
                 }
             );
@@ -762,7 +765,8 @@ impl JobRepository {
                         id: dep_job.0,
                         label: dep_job.1.clone(),
                         folder: dep_job.2.clone(),
-                        description: dep_job.3.clone(),
+                        application: dep_job.3.clone(),
+                        description: dep_job.4.clone(),
                         color: "#2196F3".to_string(),
                         is_current: false,
                     });
@@ -798,14 +802,15 @@ impl JobRepository {
         for dep_job_id in dependent_job_ids {
             tracing::debug!("[GRAPH] Processing outgoing dep job_id={}", dep_job_id);
             if let Ok(dep_job) = conn.query_row(
-                "SELECT id, job_name, folder_name, description FROM jobs WHERE id = ?",
+                "SELECT id, job_name, folder_name, application, description FROM jobs WHERE id = ?",
                 [dep_job_id],
                 |row| {
                     Ok((
                         row.get::<_, i64>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
-                        row.get::<_, Option<String>>(3)?
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?
                     ))
                 }
             ) {
@@ -815,7 +820,8 @@ impl JobRepository {
                         id: dep_job.0,
                         label: dep_job.1.clone(),
                         folder: dep_job.2.clone(),
-                        description: dep_job.3.clone(),
+                        application: dep_job.3.clone(),
+                        description: dep_job.4.clone(),
                         color: "#FF9800".to_string(),
                         is_current: false,
                     });

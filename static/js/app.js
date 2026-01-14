@@ -1066,11 +1066,22 @@ function renderJobGraph(graphData) {
     document.getElementById('stat-deps-out').textContent = depsOut;
     
     const nodes = new vis.DataSet(graphData.nodes.map(node => {
-        // Build tooltip with description
-        let tooltip = `<b>${escapeHtml(node.label)}</b><br/>Folder: ${escapeHtml(node.folder)}`;
-        if (node.description) {
-            tooltip += `<br/><br/><i>${escapeHtml(node.description)}</i>`;
+        // Build tooltip with application and description
+        let tooltipParts = [
+            `<b>${escapeHtml(node.label)}</b>`,
+            `Folder: ${escapeHtml(node.folder)}`
+        ];
+        
+        if (node.application) {
+            tooltipParts.push(`Application: ${escapeHtml(node.application)}`);
         }
+        
+        if (node.description) {
+            tooltipParts.push('');  // Empty line for spacing
+            tooltipParts.push(`<i>${escapeHtml(node.description)}</i>`);
+        }
+        
+        const tooltip = tooltipParts.join('<br/>');
         
         return {
             id: node.id,
