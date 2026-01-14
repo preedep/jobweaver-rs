@@ -61,6 +61,16 @@ impl JobRepository {
             params_vec.push(Box::new(appl_ver.clone()));
         }
         
+        if let Some(min_deps) = request.min_dependencies {
+            where_clauses.push("(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) >= ?");
+            params_vec.push(Box::new(min_deps));
+        }
+        
+        if let Some(max_deps) = request.max_dependencies {
+            where_clauses.push("(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) <= ?");
+            params_vec.push(Box::new(max_deps));
+        }
+        
         let where_clause = if where_clauses.is_empty() {
             String::new()
         } else {
@@ -73,7 +83,7 @@ impl JobRepository {
             _ => "ASC",
         };
         
-        let count_query = format!("SELECT COUNT(*) FROM jobs {}", where_clause);
+        let count_query = format!("SELECT COUNT(*) FROM jobs j {}", where_clause);
         let total: u32 = conn.query_row(
             &count_query,
             rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),

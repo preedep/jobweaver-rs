@@ -361,14 +361,16 @@ function populateSelect(selectId, options) {
 }
 
 function resetFilters() {
+    console.log('🔄 [SEARCH] Resetting all filters');
     document.getElementById('filter-job-name').value = '';
-    $('#filter-folder').val('').trigger('change');
-    $('#filter-application').val('').trigger('change');
-    $('#filter-appl-type').val('').trigger('change');
-    $('#filter-appl-ver').val('').trigger('change');
-    document.getElementById('filter-task-type').value = '';
+    $('#filter-folder').val(null).trigger('change');
+    $('#filter-application').val(null).trigger('change');
+    $('#filter-appl-type').val(null).trigger('change');
+    $('#filter-appl-ver').val(null).trigger('change');
+    $('#filter-task-type').val(null).trigger('change');
     document.getElementById('filter-critical').value = '';
-    currentFilters = {};
+    document.getElementById('filter-min-deps').value = '';
+    document.getElementById('filter-max-deps').value = '';
     currentPage = 1;
     performSearch();
 }
@@ -385,6 +387,8 @@ async function performSearch() {
     const applVer = $('#filter-appl-ver').val();
     const taskType = document.getElementById('filter-task-type').value;
     const critical = document.getElementById('filter-critical').value;
+    const minDeps = document.getElementById('filter-min-deps').value;
+    const maxDeps = document.getElementById('filter-max-deps').value;
     
     currentFilters = {};
     if (jobName) currentFilters.job_name = jobName;
@@ -394,6 +398,8 @@ async function performSearch() {
     if (applVer) currentFilters.appl_ver = applVer;
     if (taskType) currentFilters.task_type = taskType;
     if (critical) currentFilters.critical = critical === 'true';
+    if (minDeps) currentFilters.min_dependencies = parseInt(minDeps);
+    if (maxDeps) currentFilters.max_dependencies = parseInt(maxDeps);
     
     console.log('📋 [SEARCH] Filters:', currentFilters);
     console.log('📄 [SEARCH] Page:', currentPage, 'Per page:', currentPerPage);
@@ -501,10 +507,12 @@ function renderCriticalBadge(isCritical) {
 }
 
 function renderConditionsBadges(job) {
+    const totalDeps = job.in_conditions_count || 0;
+    const totalOuts = job.out_conditions_count || 0;
     return `
         <td>
-            <span class="badge badge-info">${job.in_conditions_count} In</span>
-            <span class="badge badge-info">${job.out_conditions_count} Out</span>
+            <span class="badge badge-info" title="${totalDeps} In Conditions">${totalDeps} In</span>
+            <span class="badge badge-success" title="${totalOuts} Out Conditions">${totalOuts} Out</span>
         </td>
     `;
 }
