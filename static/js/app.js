@@ -371,6 +371,8 @@ function resetFilters() {
     document.getElementById('filter-critical').value = '';
     document.getElementById('filter-min-deps').value = '';
     document.getElementById('filter-max-deps').value = '';
+    document.getElementById('filter-has-variables').value = '';
+    document.getElementById('filter-min-variables').value = '';
     currentPage = 1;
     performSearch();
 }
@@ -389,6 +391,8 @@ async function performSearch() {
     const critical = document.getElementById('filter-critical').value;
     const minDeps = document.getElementById('filter-min-deps').value;
     const maxDeps = document.getElementById('filter-max-deps').value;
+    const hasVars = document.getElementById('filter-has-variables').value;
+    const minVars = document.getElementById('filter-min-variables').value;
     
     currentFilters = {};
     if (jobName) currentFilters.job_name = jobName;
@@ -400,6 +404,8 @@ async function performSearch() {
     if (critical) currentFilters.critical = critical === 'true';
     if (minDeps) currentFilters.min_dependencies = parseInt(minDeps);
     if (maxDeps) currentFilters.max_dependencies = parseInt(maxDeps);
+    if (hasVars) currentFilters.has_variables = hasVars === 'true';
+    if (minVars) currentFilters.min_variables = parseInt(minVars);
     
     console.log('📋 [SEARCH] Filters:', currentFilters);
     console.log('📄 [SEARCH] Page:', currentPage, 'Per page:', currentPerPage);
@@ -464,7 +470,7 @@ function renderJobsTable(data) {
     
     const tbody = document.getElementById('jobs-table-body');
     if (data.jobs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center">No jobs found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center">No jobs found</td></tr>';
         return;
     }
     
@@ -488,6 +494,8 @@ function renderJobRow(job) {
             ${renderTableCell(job.appl_ver)}
             ${renderTableCell(job.task_type)}
             ${renderCriticalBadge(job.critical)}
+            ${renderResourcesBadges(job)}
+            ${renderVariablesBadge(job)}
             ${renderConditionsBadges(job)}
             ${renderActionButton(job.id)}
         </tr>
@@ -504,6 +512,36 @@ function renderCriticalBadge(isCritical) {
     const badgeClass = isCritical ? 'badge-danger' : 'badge-success';
     const badgeText = isCritical ? 'Critical' : 'Normal';
     return `<td><span class="badge ${badgeClass}">${badgeText}</span></td>`;
+}
+
+function renderResourcesBadges(job) {
+    const ctrlRes = job.control_resources_count || 0;
+    const quantRes = job.quantitative_resources_count || 0;
+    const total = ctrlRes + quantRes;
+    
+    if (total === 0) {
+        return '<td><span class="badge badge-secondary">None</span></td>';
+    }
+    
+    return `
+        <td>
+            ${ctrlRes > 0 ? `<span class="badge badge-warning" title="Control Resources">${ctrlRes} Ctrl</span>` : ''}
+            ${quantRes > 0 ? `<span class="badge badge-warning" title="Quantitative Resources">${quantRes} Quant</span>` : ''}
+        </td>
+    `;
+}
+
+function renderVariablesBadge(job) {
+    const varCount = job.variables_count || 0;
+    const badgeClass = varCount === 0 ? 'badge-secondary' : varCount > 5 ? 'badge-danger' : 'badge-info';
+    return `<td><span class="badge ${badgeClass}" title="${varCount} Variables">${varCount} Vars</span></td>`;
+}
+
+function renderCyclicBadge(isCyclic) {
+    if (isCyclic) {
+        return '<td><span class="badge badge-warning" title="Cyclic Job">🔄 Cyclic</span></td>';
+    }
+    return '<td><span class="badge badge-secondary">-</span></td>';
 }
 
 function renderConditionsBadges(job) {
@@ -554,6 +592,12 @@ function renderPagination(data) {
     const pagination = document.getElementById('pagination');
     const totalPages = data.total_pages;
     const current = data.page;
+    
+    // Hide pagination if no results
+    if (data.total === 0 || totalPages === 0) {
+        pagination.innerHTML = '';
+        return;
+    }
     
     let html = '';
     

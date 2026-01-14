@@ -239,6 +239,18 @@
                                 <label for="filter-max-deps">Max Dependencies</label>
                                 <input type="number" id="filter-max-deps" placeholder="Max" min="0">
                             </div>
+                            <div class="filter-group">
+                                <label for="filter-has-variables">Has Variables</label>
+                                <select id="filter-has-variables">
+                                    <option value="">Any</option>
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label for="filter-min-variables">Min Variables</label>
+                                <input type="number" id="filter-min-variables" placeholder="Min" min="0">
+                            </div>
                             <div class="filter-actions">
                                 <button id="search-btn" class="btn btn-primary">
                                     <i class="fas fa-search"></i> Search
@@ -280,13 +292,15 @@
                                         <th data-sort="appl_ver">APPL_VER <i class="fas fa-sort"></i></th>
                                         <th data-sort="task_type">Task Type <i class="fas fa-sort"></i></th>
                                         <th data-sort="critical">Critical <i class="fas fa-sort"></i></th>
+                                        <th>Resources</th>
+                                        <th>Variables</th>
                                         <th>Dependencies</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="jobs-table-body">
                                     <tr>
-                                        <td colspan="9" class="text-center">
+                                        <td colspan="11" class="text-center">
                                             <div class="loading">
                                                 <i class="fas fa-spinner fa-spin"></i> Loading...
                                             </div>

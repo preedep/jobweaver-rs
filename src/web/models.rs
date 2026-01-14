@@ -42,6 +42,8 @@ pub struct JobSearchRequest {
     pub critical: Option<bool>,
     pub min_dependencies: Option<i32>,
     pub max_dependencies: Option<i32>,
+    pub has_variables: Option<bool>,
+    pub min_variables: Option<i32>,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
     pub sort_by: Option<String>,
@@ -195,12 +197,11 @@ pub struct ComplexityDistribution {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FilterOptions {
-    pub applications: Vec<String>,
     pub folders: Vec<String>,
-    pub task_types: Vec<String>,
-    pub owners: Vec<String>,
+    pub applications: Vec<String>,
     pub appl_types: Vec<String>,
     pub appl_vers: Vec<String>,
+    pub task_types: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

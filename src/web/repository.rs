@@ -89,6 +89,19 @@ impl JobRepository {
             params_vec.push(Box::new(max_deps));
         }
         
+        if let Some(has_vars) = request.has_variables {
+            if has_vars {
+                where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) > 0");
+            } else {
+                where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) = 0");
+            }
+        }
+        
+        if let Some(min_vars) = request.min_variables {
+            where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) >= ?");
+            params_vec.push(Box::new(min_vars));
+        }
+        
         let where_clause = if where_clauses.is_empty() {
             String::new()
         } else {
@@ -480,22 +493,24 @@ impl JobRepository {
         let mut stmt = conn.prepare("SELECT DISTINCT task_type FROM jobs WHERE task_type IS NOT NULL ORDER BY task_type")?;
         let task_types = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT DISTINCT owner FROM jobs WHERE owner IS NOT NULL ORDER BY owner")?;
-        let owners = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
+        let appl_type_options: Vec<String> = conn.prepare(
+            "SELECT DISTINCT appl_type FROM jobs WHERE appl_type IS NOT NULL AND appl_type != '' ORDER BY appl_type"
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT DISTINCT appl_type FROM jobs WHERE appl_type IS NOT NULL AND appl_type != '' ORDER BY appl_type")?;
-        let appl_types = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
-        
-        let mut stmt = conn.prepare("SELECT DISTINCT appl_ver FROM jobs WHERE appl_ver IS NOT NULL AND appl_ver != '' ORDER BY appl_ver")?;
-        let appl_vers = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
+        let appl_ver_options: Vec<String> = conn.prepare(
+            "SELECT DISTINCT appl_ver FROM jobs WHERE appl_ver IS NOT NULL AND appl_ver != '' ORDER BY appl_ver"
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
         
         Ok(FilterOptions {
-            applications,
             folders,
+            applications,
+            appl_types: appl_type_options,
+            appl_vers: appl_ver_options,
             task_types,
-            owners,
-            appl_types,
-            appl_vers,
         })
     }
     
