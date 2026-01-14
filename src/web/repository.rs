@@ -23,6 +23,24 @@ impl JobRepository {
         let per_page = request.per_page.unwrap_or(50);
         let offset = (page - 1) * per_page;
         
+        let (where_clause, params_vec) = self.build_where_clause(request);
+        let (sort_by, sort_order) = self.get_sort_params(request);
+        
+        let total = self.count_total_jobs(&conn, &where_clause, &params_vec)?;
+        let jobs = self.execute_search_query(&conn, &where_clause, &params_vec, &sort_by, &sort_order, per_page, offset)?;
+        
+        let total_pages = (total + per_page - 1) / per_page;
+        
+        Ok(JobSearchResponse {
+            jobs,
+            total,
+            page,
+            per_page,
+            total_pages,
+        })
+    }
+    
+    fn build_where_clause(&self, request: &JobSearchRequest) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
         let mut where_clauses = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         
@@ -77,19 +95,43 @@ impl JobRepository {
             format!("WHERE {}", where_clauses.join(" AND "))
         };
         
-        let sort_by = request.sort_by.as_deref().unwrap_or("job_name");
+        (where_clause, params_vec)
+    }
+    
+    fn get_sort_params(&self, request: &JobSearchRequest) -> (String, String) {
+        let sort_by = request.sort_by.as_deref().unwrap_or("job_name").to_string();
         let sort_order = match request.sort_order {
-            Some(SortOrder::Desc) => "DESC",
-            _ => "ASC",
+            Some(SortOrder::Desc) => "DESC".to_string(),
+            _ => "ASC".to_string(),
         };
-        
+        (sort_by, sort_order)
+    }
+    
+    fn count_total_jobs(
+        &self,
+        conn: &rusqlite::Connection,
+        where_clause: &str,
+        params_vec: &[Box<dyn rusqlite::ToSql>]
+    ) -> Result<u32> {
         let count_query = format!("SELECT COUNT(*) FROM jobs j {}", where_clause);
         let total: u32 = conn.query_row(
             &count_query,
             rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
             |row| row.get(0),
         )?;
-        
+        Ok(total)
+    }
+    
+    fn execute_search_query(
+        &self,
+        conn: &rusqlite::Connection,
+        where_clause: &str,
+        params_vec: &[Box<dyn rusqlite::ToSql>],
+        sort_by: &String,
+        sort_order: &String,
+        per_page: u32,
+        offset: u32
+    ) -> Result<Vec<JobDetail>> {
         let query = format!(
             r#"
             SELECT 
@@ -116,43 +158,38 @@ impl JobRepository {
         
         let jobs = stmt.query_map(
             rusqlite::params_from_iter(all_params),
-            |row| {
-                let appl_type: String = row.get(5)?;
-                let appl_ver: String = row.get(6)?;
-                Ok(JobDetail {
-                    id: row.get(0)?,
-                    job_name: row.get(1)?,
-                    folder_name: row.get(2)?,
-                    application: row.get(3)?,
-                    sub_application: row.get(4)?,
-                    appl_type: if appl_type.is_empty() { None } else { Some(appl_type) },
-                    appl_ver: if appl_ver.is_empty() { None } else { Some(appl_ver) },
-                    description: row.get(7)?,
-                    owner: row.get(8)?,
-                    run_as: row.get(9)?,
-                    priority: row.get(10)?,
-                    critical: row.get::<_, i32>(11)? == 1,
-                    task_type: row.get(12)?,
-                    cyclic: row.get::<_, i32>(13)? == 1,
-                    node_id: row.get(14)?,
-                    cmdline: row.get(15)?,
-                    in_conditions_count: row.get(16)?,
-                    out_conditions_count: row.get(17)?,
-                    control_resources_count: row.get(18)?,
-                    variables_count: row.get(19)?,
-                })
-            },
+            Self::map_row_to_job_detail,
         )?
         .collect::<Result<Vec<_>, _>>()?;
         
-        let total_pages = (total + per_page - 1) / per_page;
+        Ok(jobs)
+    }
+    
+    fn map_row_to_job_detail(row: &rusqlite::Row) -> rusqlite::Result<JobDetail> {
+        let appl_type: String = row.get(5)?;
+        let appl_ver: String = row.get(6)?;
         
-        Ok(JobSearchResponse {
-            jobs,
-            total,
-            page,
-            per_page,
-            total_pages,
+        Ok(JobDetail {
+            id: row.get(0)?,
+            job_name: row.get(1)?,
+            folder_name: row.get(2)?,
+            application: row.get(3)?,
+            sub_application: row.get(4)?,
+            appl_type: if appl_type.is_empty() { None } else { Some(appl_type) },
+            appl_ver: if appl_ver.is_empty() { None } else { Some(appl_ver) },
+            description: row.get(7)?,
+            owner: row.get(8)?,
+            run_as: row.get(9)?,
+            priority: row.get(10)?,
+            critical: row.get::<_, i32>(11)? == 1,
+            task_type: row.get(12)?,
+            cyclic: row.get::<_, i32>(13)? == 1,
+            node_id: row.get(14)?,
+            cmdline: row.get(15)?,
+            in_conditions_count: row.get(16)?,
+            out_conditions_count: row.get(17)?,
+            control_resources_count: row.get(18)?,
+            variables_count: row.get(19)?,
         })
     }
 
