@@ -466,12 +466,12 @@ function renderJobsTable(data) {
     
     tbody.innerHTML = data.jobs.map(job => `
         <tr>
-            <td><strong>${escapeHtml(job.job_name)}</strong></td>
-            <td>${escapeHtml(job.folder_name)}</td>
-            <td>${escapeHtml(job.application || '-')}</td>
-            <td>${escapeHtml(job.appl_type || '-')}</td>
-            <td>${escapeHtml(job.appl_ver || '-')}</td>
-            <td>${escapeHtml(job.task_type || '-')}</td>
+            <td title="${escapeHtml(job.job_name)}"><strong>${escapeHtml(job.job_name)}</strong></td>
+            <td title="${escapeHtml(job.folder_name)}">${escapeHtml(job.folder_name)}</td>
+            <td title="${escapeHtml(job.application || '-')}">${escapeHtml(job.application || '-')}</td>
+            <td title="${escapeHtml(job.appl_type || '-')}">${escapeHtml(job.appl_type || '-')}</td>
+            <td title="${escapeHtml(job.appl_ver || '-')}">${escapeHtml(job.appl_ver || '-')}</td>
+            <td title="${escapeHtml(job.task_type || '-')}">${escapeHtml(job.task_type || '-')}</td>
             <td>
                 ${job.critical ? '<span class="badge badge-danger">Critical</span>' : '<span class="badge badge-success">Normal</span>'}
             </td>
@@ -488,6 +488,25 @@ function renderJobsTable(data) {
     `).join('');
     
     renderPagination(data);
+    
+    // Add scroll detection
+    setTimeout(() => {
+        const tableWrapper = document.querySelector('.table-wrapper');
+        if (tableWrapper) {
+            const hasScroll = tableWrapper.scrollWidth > tableWrapper.clientWidth;
+            if (hasScroll) {
+                tableWrapper.classList.add('has-scroll');
+                tableWrapper.addEventListener('scroll', function() {
+                    const isNearEnd = this.scrollLeft >= (this.scrollWidth - this.clientWidth - 50);
+                    if (isNearEnd) {
+                        this.classList.remove('has-scroll');
+                    } else if (!this.classList.contains('has-scroll')) {
+                        this.classList.add('has-scroll');
+                    }
+                });
+            }
+        }
+    }, 100);
 }
 
 function renderPagination(data) {

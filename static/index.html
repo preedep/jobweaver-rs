@@ -261,32 +261,32 @@
                                 </select>
                             </div>
                         </div>
-
-                        <table class="data-table" id="jobs-table">
-                            <thead>
-                                <tr>
-                                    <th data-sort="job_name">Job Name <i class="fas fa-sort"></i></th>
-                                    <th data-sort="folder_name">Folder <i class="fas fa-sort"></i></th>
-                                    <th data-sort="application">Application <i class="fas fa-sort"></i></th>
-                                    <th data-sort="appl_type">APPL_TYPE <i class="fas fa-sort"></i></th>
-                                    <th data-sort="appl_ver">APPL_VER <i class="fas fa-sort"></i></th>
-                                    <th data-sort="task_type">Task Type <i class="fas fa-sort"></i></th>
-                                    <th data-sort="critical">Critical <i class="fas fa-sort"></i></th>
-                                    <th>Dependencies</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="jobs-table-body">
-                                <tr>
-                                    <td colspan="9" class="text-center">
-                                        <div class="loading">
-                                            <i class="fas fa-spinner fa-spin"></i> Loading...
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-
+                        <div class="table-wrapper">
+                            <table class="data-table" id="jobs-table">
+                                <thead>
+                                    <tr>
+                                        <th data-sort="job_name">Job Name <i class="fas fa-sort"></i></th>
+                                        <th data-sort="folder_name">Folder <i class="fas fa-sort"></i></th>
+                                        <th data-sort="application">Application <i class="fas fa-sort"></i></th>
+                                        <th data-sort="appl_type">APPL_TYPE <i class="fas fa-sort"></i></th>
+                                        <th data-sort="appl_ver">APPL_VER <i class="fas fa-sort"></i></th>
+                                        <th data-sort="task_type">Task Type <i class="fas fa-sort"></i></th>
+                                        <th data-sort="critical">Critical <i class="fas fa-sort"></i></th>
+                                        <th>Dependencies</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="jobs-table-body">
+                                    <tr>
+                                        <td colspan="9" class="text-center">
+                                            <div class="loading">
+                                                <i class="fas fa-spinner fa-spin"></i> Loading...
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                         <div class="table-footer">
                             <div class="pagination" id="pagination"></div>
                         </div>

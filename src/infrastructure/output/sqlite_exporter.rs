@@ -204,13 +204,31 @@ impl SqliteExporter {
             );
 
             -- Create indexes for better query performance
+            
+            -- Single column indexes for exact match searches
             CREATE INDEX IF NOT EXISTS idx_jobs_folder ON jobs(folder_name);
             CREATE INDEX IF NOT EXISTS idx_jobs_application ON jobs(application);
             CREATE INDEX IF NOT EXISTS idx_jobs_critical ON jobs(critical);
+            CREATE INDEX IF NOT EXISTS idx_jobs_appl_type ON jobs(appl_type);
+            CREATE INDEX IF NOT EXISTS idx_jobs_appl_ver ON jobs(appl_ver);
+            CREATE INDEX IF NOT EXISTS idx_jobs_task_type ON jobs(task_type);
+            CREATE INDEX IF NOT EXISTS idx_jobs_owner ON jobs(owner);
+            
+            -- Composite indexes for common filter combinations
+            CREATE INDEX IF NOT EXISTS idx_jobs_app_type ON jobs(application, appl_type);
+            CREATE INDEX IF NOT EXISTS idx_jobs_folder_app ON jobs(folder_name, application);
+            CREATE INDEX IF NOT EXISTS idx_jobs_critical_app ON jobs(critical, application);
+            
+            -- Full-text search support for job_name (using trigram for LIKE queries)
+            CREATE INDEX IF NOT EXISTS idx_jobs_name ON jobs(job_name);
+            
+            -- Foreign key indexes
             CREATE INDEX IF NOT EXISTS idx_in_conditions_job ON in_conditions(job_id);
             CREATE INDEX IF NOT EXISTS idx_out_conditions_job ON out_conditions(job_id);
             CREATE INDEX IF NOT EXISTS idx_control_resources_job ON control_resources(job_id);
             CREATE INDEX IF NOT EXISTS idx_quantitative_resources_job ON quantitative_resources(job_id);
+            CREATE INDEX IF NOT EXISTS idx_job_scheduling_job ON job_scheduling(job_id);
+            CREATE INDEX IF NOT EXISTS idx_job_variables_job ON job_variables(job_id);
             "#
         ).context("Failed to create database schema")?;
 
