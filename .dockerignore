@@ -1,0 +1,43 @@
+# Build artifacts
+target/
+*.db
+*.db-shm
+*.db-wal
+
+# Output files
+output/
+*.csv
+*.html
+*.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+LICENSE
+README.md
+
+# CI/CD
+.github/
+
+# Rust
+**/*.rs.bk
+Cargo.lock
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
