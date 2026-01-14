@@ -371,10 +371,10 @@ async function loadDashboard() {
             }
             
             console.log('📊 [DASHBOARD] Rendering charts...');
+            renderBarChart('chart-appl-types', stats.jobs_by_appl_type, 'appl_type', 'count');
+            renderBarChart('chart-task-types', stats.jobs_by_task_type, 'task_type', 'count');
             renderBarChart('chart-applications', stats.jobs_by_application, 'application', 'count');
             renderBarChart('chart-folders', stats.jobs_by_folder, 'folder_name', 'job_count');
-            renderBarChart('chart-task-types', stats.jobs_by_task_type, 'task_type', 'count');
-            renderComplexityChart('chart-complexity', stats.complexity_distribution);
             
             const endTime = performance.now();
             console.log(`✅ [DASHBOARD] Dashboard loaded in ${(endTime - startTime).toFixed(2)}ms`);

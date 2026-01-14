@@ -471,11 +471,13 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let complexity_distribution = ComplexityDistribution {
-            low: total_jobs / 3,
-            medium: total_jobs / 3,
-            high: total_jobs / 3,
-        };
+        let mut stmt = conn.prepare("SELECT COALESCE(appl_type, 'Unknown'), COUNT(*) as count FROM jobs GROUP BY appl_type ORDER BY count DESC")?;
+        let jobs_by_appl_type = stmt.query_map([], |row| {
+            Ok(ApplTypeStat {
+                appl_type: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
         
         Ok(DashboardStats {
             total_jobs,
@@ -487,7 +489,7 @@ impl JobRepository {
             jobs_by_application,
             jobs_by_folder,
             jobs_by_task_type,
-            complexity_distribution,
+            jobs_by_appl_type,
         })
     }
 

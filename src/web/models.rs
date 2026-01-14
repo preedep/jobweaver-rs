@@ -167,7 +167,7 @@ pub struct DashboardStats {
     pub jobs_by_application: Vec<ApplicationStat>,
     pub jobs_by_folder: Vec<FolderStat>,
     pub jobs_by_task_type: Vec<TaskTypeStat>,
-    pub complexity_distribution: ComplexityDistribution,
+    pub jobs_by_appl_type: Vec<ApplTypeStat>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -185,6 +185,12 @@ pub struct FolderStat {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaskTypeStat {
     pub task_type: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApplTypeStat {
+    pub appl_type: String,
     pub count: u32,
 }
 
