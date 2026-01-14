@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  jobweaver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jobweaver-web
+    ports:
+      - "8080:9990"
+    volumes:
+      # Mount database directory for persistence
+      - ./data:/app/data
+    environment:
+      - RUST_LOG=info
+      - DATABASE_PATH=/app/data/controlm.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
