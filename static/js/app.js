@@ -496,7 +496,7 @@ async function performSearch() {
     const startTime = performance.now();
     console.log('🔍 [SEARCH] Starting search operation...');
     
-    showLoading(true);
+    showLoading(true); console.log("[SEARCH] Starting search...");
     
     currentFilters = {};
     
@@ -582,140 +582,86 @@ async function performSearch() {
 }
 
 function showLoading(show) {
-    const overlay = document.getElementById('loading-overlay');
-    if (show) {
-        overlay.classList.add('active');
-    } else {
-        overlay.classList.remove('active');
-    }
-}
-
-function renderJobsTable(data) {
-    updateResultsInfo(data);
+    const loadingDiv = document.querySelector('.loading-state');
+    const loadingSpinner = document.querySelector('.loading');
     
+    if (loadingDiv) {
+        loadingDiv.style.display = show ? 'block' : 'none';
+    }
+    if (loadingSpinner) {
+        loadingSpinner.style.display = show ? 'block' : 'none';
+    }
+    
+    console.log('[LOADING] Loading state:', show ? 'shown' : 'hidden');
+}
+function renderJobsTable(data) {
+    console.log('[TABLE] Rendering jobs table with', data.jobs.length, 'jobs');
     const tbody = document.getElementById('jobs-table-body');
+    if (!tbody) {
+        console.error('[TABLE] Table body not found!');
+        return;
+    }
+    
     if (data.jobs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center">No jobs found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="14" class="text-center">No jobs found</td></tr>';
         return;
     }
     
     tbody.innerHTML = data.jobs.map(renderJobRow).join('');
     renderPagination(data);
     initializeTableFeatures();
+    console.log('[TABLE] Table rendered successfully');
 }
 
 function updateResultsInfo(data) {
     const resultsInfo = document.getElementById('results-info');
-    resultsInfo.textContent = `Showing ${data.jobs.length} of ${data.total} results`;
+    if (resultsInfo) {
+        resultsInfo.textContent = `Showing ${data.jobs.length} of ${data.total} results`;
+    }
+    
+    // Update page stats
+    updatePageStats(data.total, data.total);
+}
+
+function updatePageStats(total, filtered) {
+    const totalStat = document.getElementById('total-jobs-stat');
+    const filteredStat = document.getElementById('filtered-jobs-stat');
+    
+    if (totalStat) totalStat.textContent = total.toLocaleString();
+    if (filteredStat) filteredStat.textContent = filtered.toLocaleString();
 }
 
 function renderJobRow(job) {
+    const criticalBadge = job.critical 
+        ? '<span class="badge badge-danger">Yes</span>' 
+        : '<span class="badge badge-success">No</span>';
+    
     return `
         <tr>
-            ${renderTableCell(job.job_name, true)}
-            ${renderTableCell(job.folder_name)}
-            ${renderTableCell(job.application)}
-            ${renderTableCell(job.appl_type)}
-            ${renderTableCell(job.appl_ver)}
-            ${renderTableCell(job.task_type)}
-            ${renderCriticalBadge(job.critical)}
-            ${renderResourcesBadges(job)}
-            ${renderVariablesBadge(job)}
-            ${renderConditionsBadges(job)}
-            ${renderActionButton(job.id)}
+            <td><strong>${escapeHtml(job.job_name)}</strong></td>
+            <td><span title="${escapeHtml(job.folder_name)}">${escapeHtml(job.folder_name)}</span></td>
+            <td>${escapeHtml(job.application || '-')}</td>
+            <td>${escapeHtml(job.sub_application || '-')}</td>
+            <td>${escapeHtml(job.appl_type || '-')}</td>
+            <td>${escapeHtml(job.appl_ver || '-')}</td>
+            <td>${escapeHtml(job.task_type || '-')}</td>
+            <td>${criticalBadge}</td>
+            <td>${escapeHtml(job.owner || '-')}</td>
+            <td><span class="badge badge-info">${job.control_resources_count || 0}</span></td>
+            <td><span class="badge badge-info">${job.variables_count || 0}</span></td>
+            <td><span class="badge badge-success">${job.in_conditions_count || 0}</span></td>
+            <td><span class="badge badge-danger">${job.out_conditions_count || 0}</span></td>
+            <td>
+                <button class="btn btn-icon" onclick="viewJobDetail(${job.id})" title="View Details">
+                    <i class="fas fa-eye"></i>
+                </button>
+                <button class="btn btn-icon" onclick="showJobGraph(${job.id})" title="View Graph">
+                    <i class="fas fa-project-diagram"></i>
+                </button>
+            </td>
         </tr>
     `;
 }
-
-function renderTableCell(value, isBold = false) {
-    const displayValue = escapeHtml(value || '-');
-    const content = isBold ? `<strong>${displayValue}</strong>` : displayValue;
-    return `<td title="${displayValue}">${content}</td>`;
-}
-
-function renderCriticalBadge(isCritical) {
-    const badgeClass = isCritical ? 'badge-danger' : 'badge-success';
-    const badgeText = isCritical ? 'Critical' : 'Normal';
-    return `<td><span class="badge ${badgeClass}">${badgeText}</span></td>`;
-}
-
-function renderResourcesBadges(job) {
-    const ctrlRes = job.control_resources_count || 0;
-    const quantRes = job.quantitative_resources_count || 0;
-    const total = ctrlRes + quantRes;
-    
-    if (total === 0) {
-        return '<td><span class="badge badge-secondary">None</span></td>';
-    }
-    
-    return `
-        <td>
-            ${ctrlRes > 0 ? `<span class="badge badge-warning" title="Control Resources">${ctrlRes} Ctrl</span>` : ''}
-            ${quantRes > 0 ? `<span class="badge badge-warning" title="Quantitative Resources">${quantRes} Quant</span>` : ''}
-        </td>
-    `;
-}
-
-function renderVariablesBadge(job) {
-    const varCount = job.variables_count || 0;
-    const badgeClass = varCount === 0 ? 'badge-secondary' : varCount > 5 ? 'badge-danger' : 'badge-info';
-    return `<td><span class="badge ${badgeClass}" title="${varCount} Variables">${varCount} Vars</span></td>`;
-}
-
-function renderCyclicBadge(isCyclic) {
-    if (isCyclic) {
-        return '<td><span class="badge badge-warning" title="Cyclic Job">🔄 Cyclic</span></td>';
-    }
-    return '<td><span class="badge badge-secondary">-</span></td>';
-}
-
-function renderConditionsBadges(job) {
-    const totalDeps = job.in_conditions_count || 0;
-    const totalOuts = job.out_conditions_count || 0;
-    return `
-        <td>
-            <span class="badge badge-info" title="${totalDeps} In Conditions">${totalDeps} In</span>
-            <span class="badge badge-success" title="${totalOuts} Out Conditions">${totalOuts} Out</span>
-        </td>
-    `;
-}
-
-function renderActionButton(jobId) {
-    return `
-        <td>
-            <button class="btn btn-primary btn-icon btn-sm" onclick="viewJobDetail(${jobId})" title="View Details">
-                <i class="fas fa-eye"></i>
-            </button>
-            <button class="btn btn-success btn-icon btn-sm" onclick="showJobGraph(${jobId})" title="Show Dependency Graph">
-                <i class="fas fa-project-diagram"></i>
-            </button>
-        </td>
-    `;
-}
-
-function initializeTableFeatures() {
-    setTimeout(() => {
-        initializeScrollDetection();
-        initializeColumnResize();
-    }, 100);
-}
-
-function initializeScrollDetection() {
-    const tableWrapper = document.querySelector('.table-wrapper');
-    if (!tableWrapper) return;
-    
-    const hasScroll = tableWrapper.scrollWidth > tableWrapper.clientWidth;
-    if (!hasScroll) return;
-    
-    tableWrapper.classList.add('has-scroll');
-    tableWrapper.addEventListener('scroll', handleTableScroll);
-}
-
-function handleTableScroll() {
-    const isNearEnd = this.scrollLeft >= (this.scrollWidth - this.clientWidth - 50);
-    this.classList.toggle('has-scroll', !isNearEnd);
-}
-
 function renderPagination(data) {
     const pagination = document.getElementById('pagination');
     const totalPages = data.total_pages;
@@ -960,7 +906,7 @@ function initializeColumnResize() {
 async function exportToCSV() {
     const startTime = performance.now();
     console.log('📥 [EXPORT] Starting CSV export...');
-    showLoading(true);
+    showLoading(true); console.log("[SEARCH] Starting search...");
     document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Exporting to CSV...';
     
     const jobName = document.getElementById('filter-job-name').value;

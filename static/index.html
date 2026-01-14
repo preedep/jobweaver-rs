@@ -139,126 +139,227 @@
             </div>
 
             <!-- Jobs Page -->
+            <!-- Jobs Page -->
             <div id="jobs-page" class="content-page">
-                <div class="page-header">
-                    <h1>Jobs</h1>
-                    <p>Search and explore Control-M jobs</p>
-                </div>
-
-                <div class="search-section">
-                    <div class="search-filters">
-                        <div class="filters-grid">
-                            <div class="filter-group">
-                                <label for="filter-job-name">Job Name</label>
-                                <input type="text" id="filter-job-name" placeholder="Search job name...">
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-folder">Folder</label>
-                                <select id="filter-folder" class="select2-dropdown">
-                                    <option value="">All Folders</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-application">Application</label>
-                                <select id="filter-application" class="select2-dropdown">
-                                    <option value="">All Applications</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-appl-type">APPL_TYPE</label>
-                                <select id="filter-appl-type" class="select2-dropdown">
-                                    <option value="">All Types</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-appl-ver">APPL_VER</label>
-                                <select id="filter-appl-ver" class="select2-dropdown">
-                                    <option value="">All Versions</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-task-type">Task Type</label>
-                                <select id="filter-task-type" class="select2-dropdown">
-                                    <option value="">All Types</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-critical">Critical</label>
-                                <select id="filter-critical">
-                                    <option value="">All</option>
-                                    <option value="true">Critical Only</option>
-                                    <option value="false">Non-Critical</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-min-deps">Min Dependencies</label>
-                                <input type="number" id="filter-min-deps" placeholder="Min" min="0">
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-max-deps">Max Dependencies</label>
-                                <input type="number" id="filter-max-deps" placeholder="Max" min="0">
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-has-variables">Has Variables</label>
-                                <select id="filter-has-variables">
-                                    <option value="">Any</option>
-                                    <option value="true">Yes</option>
-                                    <option value="false">No</option>
-                                </select>
-                            </div>
-                            <div class="filter-group">
-                                <label for="filter-min-variables">Min Variables</label>
-                                <input type="number" id="filter-min-variables" placeholder="Min" min="0">
+                <!-- Modern Page Header -->
+                <div class="page-header-modern">
+                    <div class="page-title-section">
+                        <h1><i class="fas fa-briefcase"></i> Jobs Explorer</h1>
+                        <p class="page-subtitle">Search and analyze Control-M jobs with advanced filters</p>
+                    </div>
+                    <div class="page-stats">
+                        <div class="stat-chip">
+                            <i class="fas fa-database"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="total-jobs-stat">0</span>
+                                <span class="stat-label">Total Jobs</span>
                             </div>
                         </div>
-                        <div class="filter-actions">
-                            <button id="search-btn" class="btn btn-primary">
-                                <i class="fas fa-search"></i> Search
+                        <div class="stat-chip">
+                            <i class="fas fa-filter"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="filtered-jobs-stat">0</span>
+                                <span class="stat-label">Filtered</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Filters Card -->
+                <div class="filter-card-modern">
+                    <div class="filter-card-header">
+                        <div class="filter-card-title">
+                            <i class="fas fa-sliders-h"></i>
+                            <h3>Advanced Filters</h3>
+                            <button class="btn-collapse" id="toggle-filters" type="button">
+                                <i class="fas fa-chevron-up"></i>
                             </button>
-                            <button id="reset-btn" class="btn btn-outline">
+                        </div>
+                        <div class="filter-card-actions">
+                            <button class="btn btn-secondary btn-sm" id="reset-btn" type="button">
                                 <i class="fas fa-redo"></i> Reset
                             </button>
-                            <button id="export-csv-btn" class="btn btn-success">
+                            <button class="btn btn-primary btn-sm" id="search-btn" type="button">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-card-body" id="filter-body">
+                        <!-- Basic Search Section -->
+                        <div class="filter-section">
+                            <div class="filter-section-title">
+                                <i class="fas fa-search"></i>
+                                <span>Basic Search</span>
+                            </div>
+                            <div class="filter-grid-3">
+                                <div class="form-group-modern">
+                                    <label for="filter-job-name">
+                                        <i class="fas fa-tag"></i> Job Name
+                                    </label>
+                                    <input type="text" id="filter-job-name" placeholder="Search by job name..." class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-folder">
+                                        <i class="fas fa-folder"></i> Folder
+                                    </label>
+                                    <select id="filter-folder" class="select2-dropdown select-modern">
+                                        <option value="">All Folders</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-application">
+                                        <i class="fas fa-cube"></i> Application
+                                    </label>
+                                    <select id="filter-application" class="select2-dropdown select-modern">
+                                        <option value="">All Applications</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Configuration Section -->
+                        <div class="filter-section">
+                            <div class="filter-section-title">
+                                <i class="fas fa-cog"></i>
+                                <span>Configuration</span>
+                            </div>
+                            <div class="filter-grid-4">
+                                <div class="form-group-modern">
+                                    <label for="filter-appl-type">
+                                        <i class="fas fa-code-branch"></i> APPL Type
+                                    </label>
+                                    <select id="filter-appl-type" class="select2-dropdown select-modern">
+                                        <option value="">All Types</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-appl-ver">
+                                        <i class="fas fa-code-branch"></i> APPL Version
+                                    </label>
+                                    <select id="filter-appl-ver" class="select2-dropdown select-modern">
+                                        <option value="">All Versions</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-task-type">
+                                        <i class="fas fa-tasks"></i> Task Type
+                                    </label>
+                                    <select id="filter-task-type" class="select2-dropdown select-modern">
+                                        <option value="">All Task Types</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-critical">
+                                        <i class="fas fa-exclamation-triangle"></i> Critical
+                                    </label>
+                                    <select id="filter-critical" class="select-modern">
+                                        <option value="">All</option>
+                                        <option value="true">Critical Only</option>
+                                        <option value="false">Non-Critical</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dependencies & Resources Section -->
+                        <div class="filter-section">
+                            <div class="filter-section-title">
+                                <i class="fas fa-project-diagram"></i>
+                                <span>Dependencies & Resources</span>
+                            </div>
+                            <div class="filter-grid-4">
+                                <div class="form-group-modern">
+                                    <label for="filter-min-deps">
+                                        <i class="fas fa-arrow-down"></i> Min Dependencies
+                                    </label>
+                                    <input type="number" id="filter-min-deps" placeholder="Min" min="0" class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-max-deps">
+                                        <i class="fas fa-arrow-up"></i> Max Dependencies
+                                    </label>
+                                    <input type="number" id="filter-max-deps" placeholder="Max" min="0" class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-has-variables">
+                                        <i class="fas fa-dollar-sign"></i> Has Variables
+                                    </label>
+                                    <select id="filter-has-variables" class="select-modern">
+                                        <option value="">Any</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-min-variables">
+                                        <i class="fas fa-dollar-sign"></i> Min Variables
+                                    </label>
+                                    <input type="number" id="filter-min-variables" placeholder="Min" min="0" class="input-modern">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Active Filters Display -->
+                    <div class="active-filters-bar" id="active-filters" style="display: none;">
+                        <div class="active-filters-label">
+                            <i class="fas fa-filter"></i> Active Filters:
+                        </div>
+                        <div class="filter-chips" id="filter-chips"></div>
+                        <button class="btn-clear-all" onclick="resetFilters()" type="button">
+                            <i class="fas fa-times-circle"></i> Clear All
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div class="results-card-modern">
+                    <div class="results-card-header">
+                        <div class="results-info-section">
+                            <h3><i class="fas fa-list"></i> Search Results</h3>
+                            <span class="results-count" id="results-info">No results</span>
+                        </div>
+                        <div class="results-card-actions">
+                            <div class="per-page-selector">
+                                <label>Show:</label>
+                                <select id="per-page" class="select-modern-sm">
+                                    <option value="25">25</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-success btn-sm" id="export-csv-btn" type="button">
                                 <i class="fas fa-file-csv"></i> Export CSV
                             </button>
                         </div>
                     </div>
-                </div>
-
-                <div class="job-results">
-                    <div class="results-header">
-                        <div id="results-info" class="results-info">Showing 0 of 0 results</div>
-                        <div class="results-controls">
-                            <label for="per-page">Per page:</label>
-                            <select id="per-page">
-                                <option value="25">25</option>
-                                <option value="50" selected>50</option>
-                                <option value="100">100</option>
-                                <option value="200">200</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="table-wrapper">
-                        <table class="data-table" id="jobs-table">
+                    
+                    <div class="table-container-modern">
+                        <table class="data-table-modern" id="jobs-table">
                             <thead>
                                 <tr>
                                     <th data-sort="job_name">Job Name <i class="fas fa-sort"></i></th>
                                     <th data-sort="folder_name">Folder <i class="fas fa-sort"></i></th>
                                     <th data-sort="application">Application <i class="fas fa-sort"></i></th>
-                                    <th data-sort="appl_type">APPL_TYPE <i class="fas fa-sort"></i></th>
-                                    <th data-sort="appl_ver">APPL_VER <i class="fas fa-sort"></i></th>
+                                    <th data-sort="sub_application">Sub App <i class="fas fa-sort"></i></th>
+                                    <th data-sort="appl_type">APPL Type <i class="fas fa-sort"></i></th>
+                                    <th data-sort="appl_ver">APPL Ver <i class="fas fa-sort"></i></th>
                                     <th data-sort="task_type">Task Type <i class="fas fa-sort"></i></th>
                                     <th data-sort="critical">Critical <i class="fas fa-sort"></i></th>
+                                    <th>Owner</th>
                                     <th>Resources</th>
                                     <th>Variables</th>
-                                    <th>Dependencies</th>
+                                    <th>In Deps</th>
+                                    <th>Out Deps</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="jobs-table-body">
                                 <tr>
-                                    <td colspan="11" class="text-center">
-                                        <div class="loading">
+                                    <td colspan="14" class="text-center">
+                                        <div class="loading-state">
                                             <i class="fas fa-spinner fa-spin"></i> Loading...
                                         </div>
                                     </td>
@@ -266,14 +367,13 @@
                             </tbody>
                         </table>
                     </div>
-                    <div class="table-footer">
+                    
+                    <div class="table-footer-modern">
                         <div class="pagination" id="pagination"></div>
                     </div>
                 </div>
             </div>
-        </div>
-            </main>
-        </div>
+        </main>
 
         <!-- Job Detail Modal -->
         <div id="job-detail-modal" class="modal">
