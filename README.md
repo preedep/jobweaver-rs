@@ -1,0 +1,583 @@
+# JobWeaver-RS
+
+[🇬🇧 English](#english) | [🇹🇭 ภาษาไทย](#ภาษาไทย)
+
+---
+
+## English
+
+### Overview
+
+JobWeaver-RS is a Control-M XML analyzer for assessing job complexity and determining optimal migration strategies to Apache Airflow. It provides detailed analysis reports in multiple formats (JSON, CSV, HTML, Markdown) to help plan and execute Control-M to Airflow migrations.
+
+Built with Rust using Clean Architecture principles.
+
+### Features
+
+- 📊 **Complexity Analysis**: Calculates complexity scores based on dependencies, conditions, resources, and scheduling patterns
+- 🎯 **Migration Difficulty Assessment**: Categorizes jobs as Easy, Medium, or Hard to migrate
+- 📈 **Migration Wave Planning**: Groups jobs into migration waves based on complexity and dependencies
+- 🔍 **Dependency Analysis**: Builds dependency graphs and detects circular dependencies
+- 📄 **Multiple Output Formats**: Generates reports in JSON, CSV, HTML, and Markdown
+- 💾 **SQLite Export**: Export raw Control-M data to SQLite database for custom queries and analysis
+- 🌐 **Web Server**: Enterprise-grade web interface for interactive job exploration with authentication, search, and dashboard
+- 🏗️ **Clean Architecture**: Built with domain-driven design principles
+- ✅ **Comprehensive Testing**: Unit tests for all core components
+
+### Architecture
+
+The project follows Clean Architecture principles:
+
+```
+src/
+├── domain/              # Business logic and entities
+│   ├── entities/        # Core domain models (Job, Folder, etc.)
+│   ├── value_objects/   # Value objects (ComplexityScore, etc.)
+│   └── repositories/    # Repository interfaces
+├── application/         # Use cases and services
+│   ├── use_cases/       # Application use cases
+│   └── services/        # Domain services
+├── infrastructure/      # External adapters
+│   ├── parsers/         # XML parsing
+│   ├── repositories/    # Repository implementations
+│   └── output/          # Report generators
+└── presentation/        # CLI and DTOs
+    ├── cli/             # Command-line interface
+    └── dto/             # Data transfer objects
+```
+
+### Installation
+
+#### Prerequisites
+
+- Rust 1.70 or higher
+- Cargo
+
+#### Build from Source
+
+```bash
+git clone <repository-url>
+cd jobweaver-rs
+cargo build --release
+```
+
+The binary will be available at `target/release/jobweaver`
+
+### Usage
+
+JobWeaver supports two main commands: `analyze` for generating migration reports and `export-sqlite` for exporting raw data to SQLite.
+
+#### Analyze Command
+
+Generate migration analysis reports in various formats.
+
+```bash
+jobweaver analyze -i datasource/export_xml_260109.xml -o output
+```
+
+**Options:**
+```
+  -i, --input <FILE>      Path to Control-M XML export file
+  -o, --output <DIR>      Output directory for reports [default: output]
+  -f, --format <FORMAT>   Output format: json, csv, html, markdown, all [default: all]
+  -v, --verbose           Enable verbose logging
+```
+
+**Examples:**
+
+Generate all report formats:
+```bash
+jobweaver analyze -i input.xml -o reports
+```
+
+Generate only JSON report:
+```bash
+jobweaver analyze -i input.xml -o reports -f json
+```
+
+Generate CSV report with verbose logging:
+```bash
+jobweaver analyze -i input.xml -o reports -f csv -v
+```
+
+#### Export SQLite Command
+
+Export raw Control-M data to SQLite database for custom queries and analysis. Features real-time progress animation showing export status.
+
+**Performance:** Highly optimized with transactions, prepared statements, and WAL mode. Can export 10,000 jobs in 5-20 seconds (90-600x faster than naive implementation).
+
+```bash
+jobweaver export-sqlite -i input.xml -o controlm.db
+```
+
+**Options:**
+```
+  -i, --input <FILE>      Path to Control-M XML export file
+  -o, --output <FILE>     Output SQLite database file [default: controlm.db]
+  -v, --verbose           Enable verbose logging
+```
+
+**Examples:**
+
+Export to default database:
+```bash
+jobweaver export-sqlite -i input.xml
+```
+
+Export to custom database file:
+```bash
+jobweaver export-sqlite -i input.xml -o my_jobs.db
+```
+
+Query the exported database:
+```bash
+sqlite3 controlm.db "SELECT job_name, folder_name FROM jobs WHERE critical = 1;"
+```
+
+See [SQLite Schema Documentation](docs/SQLITE_SCHEMA.md) for detailed table structure and query examples.
+
+See [Performance Documentation](docs/PERFORMANCE.md) for optimization details and benchmarks.
+
+#### Web Server Command
+
+Start an interactive web server to explore jobs through a modern web interface.
+
+```bash
+jobweaver serve -d controlm.db
+```
+
+**Options:**
+```
+  -d, --database <FILE>   SQLite database file [default: controlm.db]
+  -p, --port <PORT>       Port to listen on [default: 8080]
+      --host <HOST>       Host to bind to [default: 127.0.0.1]
+  -v, --verbose           Enable verbose logging
+```
+
+**Features:**
+- 🔐 Authentication (Local & Entra ID)
+- 🔍 Advanced search with multiple filters
+- 📊 Interactive dashboard with statistics
+- 📋 Enterprise-grade sortable table
+- 🎯 Drill-down job details
+- 📱 Responsive design
+
+**Example:**
+```bash
+# Start web server
+jobweaver serve -d controlm.db -p 8080
+
+# Open browser to http://localhost:8080
+# Default login: admin / admin
+```
+
+See [Web Server Documentation](docs/WEB_SERVER.md) for complete guide and API reference.
+
+### Output Formats
+
+#### JSON Report (`analysis.json`)
+Detailed analysis with all metrics, suitable for programmatic processing.
+
+#### CSV Report (`analysis.csv`)
+Tabular format for easy import into spreadsheets and databases.
+
+#### HTML Report (`analysis.html`)
+Interactive web-based report with styling and formatting.
+
+#### Markdown Report (`analysis.md`)
+Human-readable documentation format with tables and sections.
+
+#### SQLite Database (`controlm.db`)
+Normalized relational database containing all raw Control-M data. Highly optimized for fast bulk inserts. Perfect for:
+- Custom SQL queries and analysis
+- Integration with BI tools
+- Data exploration and reporting
+- Building custom dashboards
+
+**Performance:** 10,000 jobs exported in 5-20 seconds with optimized transactions and prepared statements.
+
+See [SQLite Schema Documentation](docs/SQLITE_SCHEMA.md) for complete table structure and query examples.
+
+### Complexity Scoring
+
+The complexity score is calculated based on:
+
+- **Dependencies** (3 points each): In-conditions and control resources
+- **Dependency Depth** (5 points per level): Depth of dependency chain
+- **Conditions** (2 points each): In/out conditions
+- **Variables** (1 point each): Job variables and auto-edits
+- **ON Conditions** (4 points each + complexity): Conditional logic
+- **Cyclic Jobs** (15 points): Jobs with cyclic execution
+- **Resources** (3 points each): Quantitative and control resources
+- **Scheduling** (2 points per feature): Calendars, time windows, etc.
+
+#### Migration Difficulty Levels
+
+- **Easy** (0-30): Simple jobs with minimal dependencies
+- **Medium** (31-60): Moderate complexity with some dependencies
+- **Hard** (61+): Complex jobs requiring careful planning
+
+### Migration Waves
+
+Jobs are automatically grouped into migration waves:
+
+1. **Wave 1**: Low complexity, no dependencies (Quick wins)
+2. **Wave 2**: Low to medium complexity, minimal dependencies
+3. **Wave 3**: Medium complexity or critical jobs
+4. **Wave 4**: Medium complexity with dependencies
+5. **Wave 5**: High complexity requiring careful planning
+
+### Development
+
+#### Running Tests
+
+```bash
+cargo test
+```
+
+#### Running with Debug Logging
+
+```bash
+cargo run -- -i input.xml -o output -v
+```
+
+#### Code Coverage
+
+```bash
+cargo tarpaulin --out Html
+```
+
+### Project Structure
+
+```
+jobweaver-rs/
+├── Cargo.toml           # Project dependencies
+├── README.md            # This file
+├── src/                 # Source code
+├── datasource/          # Sample Control-M XML files
+└── tests/               # Integration tests
+```
+
+### Key Dependencies
+
+- **roxmltree**: XML parsing
+- **serde**: Serialization/deserialization
+- **clap**: Command-line argument parsing
+- **petgraph**: Dependency graph analysis
+- **csv**: CSV generation
+- **tera**: HTML templating
+- **rusqlite**: SQLite database operations
+- **indicatif**: Progress bars and spinners
+- **anyhow**: Error handling
+- **tracing**: Logging
+- **encoding_rs**: Multi-encoding support
+
+### Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+### License
+
+See LICENSE file for details.
+
+### Support
+
+For issues and questions, please open an issue on the GitHub repository.
+
+### Roadmap
+
+- [ ] Support for Control-M SSD files
+- [ ] Advanced dependency visualization
+- [ ] Airflow DAG code generation
+- [ ] Integration with Airflow REST API
+- [ ] Support for multiple Control-M versions
+- [ ] Performance optimization for large XML files
+- [ ] Web UI for interactive analysis
+
+### Authors
+
+JobWeaver Team
+
+### Acknowledgments
+
+- Control-M documentation
+- Apache Airflow community
+- Rust community
+
+---
+
+## ภาษาไทย
+
+### ภาพรวม
+
+JobWeaver-RS เป็นเครื่องมือวิเคราะห์ไฟล์ XML จาก Control-M เพื่อประเมินความซับซ้อนของ Job และกำหนดกลยุทธ์การย้ายข้อมูลไปยัง Apache Airflow ที่เหมาะสม โปรแกรมสร้างรายงานการวิเคราะห์ในหลายรูปแบบ (JSON, CSV, HTML, Markdown) เพื่อช่วยในการวางแผนและดำเนินการย้ายข้อมูลจาก Control-M ไปยัง Airflow
+
+พัฒนาด้วยภาษา Rust โดยใช้หลักการ Clean Architecture
+
+### ฟีเจอร์หลัก
+
+- 📊 **วิเคราะห์ความซับซ้อน**: คำนวณคะแนนความซับซ้อนจาก dependencies, conditions, resources และรูปแบบการ schedule
+- 🎯 **ประเมินความยากในการย้าย**: จัดกลุ่ม Job เป็น Easy, Medium หรือ Hard ตามความยากในการย้าย
+- 📈 **วางแผน Migration Wave**: จัดกลุ่ม Job เป็น wave ตามความซับซ้อนและ dependencies
+- 🔍 **วิเคราะห์ Dependency**: สร้าง dependency graph และตรวจจับ circular dependencies
+- 📄 **รายงานหลายรูปแบบ**: สร้างรายงานในรูปแบบ JSON, CSV, HTML และ Markdown
+- 💾 **Export ไปยัง SQLite**: Export ข้อมูล Control-M แบบ raw ไปยัง SQLite database เพื่อ query และวิเคราะห์แบบกำหนดเอง
+- 🏗️ **Clean Architecture**: พัฒนาตามหลัก Domain-Driven Design
+- ✅ **Unit Tests**: ครอบคลุมทุก component หลัก
+
+### สถาปัตยกรรม
+
+โปรเจคใช้หลักการ Clean Architecture:
+
+```
+src/
+├── domain/              # Business logic และ entities
+│   ├── entities/        # Core domain models (Job, Folder, ฯลฯ)
+│   ├── value_objects/   # Value objects (ComplexityScore, ฯลฯ)
+│   └── repositories/    # Repository interfaces
+├── application/         # Use cases และ services
+│   ├── use_cases/       # Application use cases
+│   └── services/        # Domain services
+├── infrastructure/      # External adapters
+│   ├── parsers/         # XML parsing
+│   ├── repositories/    # Repository implementations
+│   └── output/          # Report generators
+└── presentation/        # CLI และ DTOs
+    ├── cli/             # Command-line interface
+    └── dto/             # Data transfer objects
+```
+
+### การติดตั้ง
+
+#### ความต้องการของระบบ
+
+- Rust 1.70 ขึ้นไป
+- Cargo
+
+#### Build จาก Source Code
+
+```bash
+git clone <repository-url>
+cd jobweaver-rs
+cargo build --release
+```
+
+ไฟล์ binary จะอยู่ที่ `target/release/jobweaver`
+
+### วิธีใช้งาน
+
+JobWeaver รองรับ 2 คำสั่งหลัก: `analyze` สำหรับสร้างรายงานการวิเคราะห์ และ `export-sqlite` สำหรับ export ข้อมูล raw ไปยัง SQLite
+
+#### คำสั่ง Analyze
+
+สร้างรายงานวิเคราะห์การย้ายข้อมูลในรูปแบบต่างๆ
+
+```bash
+jobweaver analyze -i datasource/export_xml_260109.xml -o output
+```
+
+**ตัวเลือก:**
+```
+  -i, --input <FILE>      ไฟล์ XML ที่ export จาก Control-M
+  -o, --output <DIR>      โฟลเดอร์สำหรับเก็บรายงาน [default: output]
+  -f, --format <FORMAT>   รูปแบบรายงาน: json, csv, html, markdown, all [default: all]
+  -v, --verbose           แสดง log แบบละเอียด
+```
+
+**ตัวอย่าง:**
+
+สร้างรายงานทุกรูปแบบ:
+```bash
+jobweaver analyze -i input.xml -o reports
+```
+
+สร้างเฉพาะรายงาน JSON:
+```bash
+jobweaver analyze -i input.xml -o reports -f json
+```
+
+สร้างรายงาน CSV พร้อม verbose logging:
+```bash
+jobweaver analyze -i input.xml -o reports -f csv -v
+```
+
+#### คำสั่ง Export SQLite
+
+Export ข้อมูล Control-M แบบ raw ไปยัง SQLite database เพื่อ query และวิเคราะห์แบบกำหนดเอง มี animation แสดงความคืบหน้าแบบ real-time
+
+**ประสิทธิภาพ:** ปรับแต่งให้เร็วสูงสุดด้วย transactions, prepared statements และ WAL mode สามารถ export 10,000 jobs ได้ใน 5-20 วินาที (เร็วขึ้น 90-600 เท่า)
+
+```bash
+jobweaver export-sqlite -i input.xml -o controlm.db
+```
+
+**ตัวเลือก:**
+```
+  -i, --input <FILE>      ไฟล์ XML ที่ export จาก Control-M
+  -o, --output <FILE>     ไฟล์ SQLite database [default: controlm.db]
+  -v, --verbose           แสดง log แบบละเอียด
+```
+
+**ตัวอย่าง:**
+
+Export ไปยัง database ค่าเริ่มต้น:
+```bash
+jobweaver export-sqlite -i input.xml
+```
+
+Export ไปยังไฟล์ database ที่กำหนดเอง:
+```bash
+jobweaver export-sqlite -i input.xml -o my_jobs.db
+```
+
+Query ข้อมูลจาก database ที่ export:
+```bash
+sqlite3 controlm.db "SELECT job_name, folder_name FROM jobs WHERE critical = 1;"
+```
+
+ดูรายละเอียด [เอกสาร SQLite Schema](docs/SQLITE_SCHEMA.md) สำหรับโครงสร้างตารางและตัวอย่าง query
+
+ดูรายละเอียด [เอกสารประสิทธิภาพ](docs/PERFORMANCE.md) สำหรับรายละเอียดการปรับแต่งและ benchmarks
+
+### รูปแบบรายงาน
+
+#### JSON Report (`analysis.json`)
+รายงานแบบละเอียดพร้อม metrics ทั้งหมด เหมาะสำหรับการประมวลผลด้วยโปรแกรม
+
+#### CSV Report (`analysis.csv`)
+รูปแบบตาราง นำเข้า spreadsheet หรือ database ได้ง่าย
+
+#### HTML Report (`analysis.html`)
+รายงานแบบ web พร้อม styling และการจัดรูปแบบ
+
+#### Markdown Report (`analysis.md`)
+รูปแบบเอกสารที่อ่านง่าย มีตารางและหัวข้อแบ่งส่วน
+
+#### SQLite Database (`controlm.db`)
+Relational database ที่มีข้อมูล Control-M แบบ raw ทั้งหมด ปรับแต่งให้เร็วสูงสุดสำหรับการ insert ข้อมูลจำนวนมาก เหมาะสำหรับ:
+- Query และวิเคราะห์ข้อมูลด้วย SQL แบบกำหนดเอง
+- เชื่อมต่อกับเครื่องมือ BI
+- สำรวจและรายงานข้อมูล
+- สร้าง dashboard แบบกำหนดเอง
+
+**ประสิทธิภาพ:** Export 10,000 jobs ได้ใน 5-20 วินาที ด้วยการปรับแต่ง transactions และ prepared statements
+
+ดูรายละเอียด [เอกสาร SQLite Schema](docs/SQLITE_SCHEMA.md) สำหรับโครงสร้างตารางและตัวอย่าง query
+
+### การคำนวณคะแนนความซับซ้อน
+
+คะแนนความซับซ้อนคำนวณจาก:
+
+- **Dependencies** (3 คะแนน/รายการ): In-conditions และ control resources
+- **Dependency Depth** (5 คะแนน/ระดับ): ความลึกของ dependency chain
+- **Conditions** (2 คะแนน/รายการ): In/out conditions
+- **Variables** (1 คะแนน/รายการ): Job variables และ auto-edits
+- **ON Conditions** (4 คะแนน/รายการ + ความซับซ้อน): Conditional logic
+- **Cyclic Jobs** (15 คะแนน): Jobs ที่ทำงานแบบ cyclic
+- **Resources** (3 คะแนน/รายการ): Quantitative และ control resources
+- **Scheduling** (2 คะแนน/feature): Calendars, time windows ฯลฯ
+
+#### ระดับความยากในการย้าย
+
+- **Easy** (0-30): Jobs ง่าย มี dependencies น้อย
+- **Medium** (31-60): ความซับซ้อนปานกลาง มี dependencies บ้าง
+- **Hard** (61+): Jobs ซับซ้อน ต้องวางแผนอย่างรอบคอบ
+
+### Migration Waves
+
+Jobs จะถูกจัดกลุ่มเป็น migration waves อัตโนมัติ:
+
+1. **Wave 1**: ความซับซ้อนต่ำ ไม่มี dependencies (Quick wins)
+2. **Wave 2**: ความซับซ้อนต่ำถึงปานกลาง มี dependencies น้อย
+3. **Wave 3**: ความซับซ้อนปานกลาง หรือ critical jobs
+4. **Wave 4**: ความซับซ้อนปานกลาง มี dependencies
+5. **Wave 5**: ความซับซ้อนสูง ต้องวางแผนอย่างรอบคอบ
+
+### การพัฒนา
+
+#### รัน Tests
+
+```bash
+cargo test
+```
+
+#### รันพร้อม Debug Logging
+
+```bash
+cargo run -- -i input.xml -o output -v
+```
+
+#### ตรวจสอบ Code Coverage
+
+```bash
+cargo tarpaulin --out Html
+```
+
+### โครงสร้างโปรเจค
+
+```
+jobweaver-rs/
+├── Cargo.toml           # Dependencies ของโปรเจค
+├── README.md            # ไฟล์นี้
+├── src/                 # Source code
+├── datasource/          # ไฟล์ตัวอย่าง Control-M XML
+└── tests/               # Integration tests
+```
+
+### Dependencies หลัก
+
+- **roxmltree**: XML parsing
+- **serde**: Serialization/deserialization
+- **clap**: Command-line argument parsing
+- **petgraph**: Dependency graph analysis
+- **csv**: CSV generation
+- **tera**: HTML templating
+- **rusqlite**: การทำงานกับ SQLite database
+- **indicatif**: Progress bars และ spinners
+- **anyhow**: Error handling
+- **tracing**: Logging
+- **encoding_rs**: รองรับ encoding หลายแบบ
+
+### การมีส่วนร่วม
+
+ยินดีรับ contributions! กรุณาปฏิบัติตามแนวทางนี้:
+
+1. Fork repository
+2. สร้าง feature branch
+3. เขียน tests สำหรับ functionality ใหม่
+4. ตรวจสอบให้ tests ทั้งหมดผ่าน
+5. ส่ง pull request
+
+### License
+
+ดูรายละเอียดในไฟล์ LICENSE
+
+### การสนับสนุน
+
+สำหรับปัญหาและคำถาม กรุณาเปิด issue ใน GitHub repository
+
+### Roadmap
+
+- [ ] รองรับไฟล์ Control-M SSD
+- [ ] Dependency visualization ขั้นสูง
+- [ ] สร้างโค้ด Airflow DAG อัตโนมัติ
+- [ ] เชื่อมต่อกับ Airflow REST API
+- [ ] รองรับ Control-M หลายเวอร์ชัน
+- [ ] เพิ่มประสิทธิภาพสำหรับไฟล์ XML ขนาดใหญ่
+- [ ] Web UI สำหรับวิเคราะห์แบบ interactive
+
+### ผู้พัฒนา
+
+JobWeaver Team
+
+### กิตติกรรมประกาศ
+
+- เอกสาร Control-M
+- ชุมชน Apache Airflow
+- ชุมชน Rust

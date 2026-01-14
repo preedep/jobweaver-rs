@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobWeaver - Control-M Job Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <!-- Login Page -->
+    <div id="login-page" class="page active">
+        <div class="login-container">
+            <div class="login-card">
+                <div class="login-header">
+                    <i class="fas fa-network-wired"></i>
+                    <h1>JobWeaver</h1>
+                    <p>Control-M Job Explorer</p>
+                </div>
+                
+                <div class="login-tabs">
+                    <button class="tab-btn active" data-tab="local">
+                        <i class="fas fa-user"></i> Username & Password
+                    </button>
+                    <button class="tab-btn" data-tab="entra">
+                        <i class="fab fa-microsoft"></i> Entra ID
+                    </button>
+                </div>
+                
+                <div class="login-content">
+                    <div class="tab-content active" id="local-login">
+                        <form id="login-form">
+                            <div class="form-group">
+                                <label for="username">Username</label>
+                                <input type="text" id="username" name="username" placeholder="Enter username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">Password</label>
+                                <input type="password" id="password" name="password" placeholder="Enter password" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block">
+                                <i class="fas fa-sign-in-alt"></i> Sign In
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="tab-content" id="entra-login">
+                        <div class="entra-info">
+                            <i class="fab fa-microsoft" style="font-size: 48px; color: #00a4ef; margin-bottom: 20px;"></i>
+                            <p>Sign in with your Microsoft Entra ID account</p>
+                        </div>
+                        <button type="button" id="entra-login-btn" class="btn btn-primary btn-block">
+                            <i class="fab fa-microsoft"></i> Sign in with Microsoft
+                        </button>
+                    </div>
+                    
+                    <div id="login-error" class="alert alert-error" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" class="page">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-briefcase"></i>
+                <h2>JobWeaver</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item" data-page="dashboard">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="nav-item active" data-page="jobs">
+                    <i class="fas fa-tasks"></i>
+                    <span>Jobs</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <i class="fas fa-user-circle"></i>
+                    <span id="current-user">User</span>
+                </div>
+                <button id="logout-btn" class="btn btn-outline btn-sm">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Page -->
+            <div id="dashboard-page" class="content-page active">
+                <div class="page-header">
+                    <h1><i class="fas fa-chart-line"></i> Migration Dashboard</h1>
+                    <p>Control-M Job Analysis & Migration Planning Overview</p>
+                </div>
+                
+                <!-- Key Metrics Grid -->
+                <div class="dashboard-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #dbeafe;">
+                            <i class="fas fa-tasks" style="color: #2563eb;"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stat-total-jobs">0</h3>
+                            <p>Total Jobs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #fef3c7;">
+                            <i class="fas fa-folder" style="color: #f59e0b;"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stat-total-folders">0</h3>
+                            <p>Total Folders</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #fee2e2;">
+                            <i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stat-critical-jobs">0</h3>
+                            <p>Critical Jobs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #dcfce7;">
+                            <i class="fas fa-terminal" style="color: #10b981;"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stat-cli-jobs">0</h3>
+                            <p>CLI Jobs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #e0e7ff;">
+                            <i class="fas fa-sync-alt" style="color: #6366f1;"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stat-cyclic-jobs">0</h3>
+                            <p>Cyclic Jobs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #fce7f3;">
+                            <i class="fas fa-exchange-alt" style="color: #ec4899;"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stat-file-transfer">0</h3>
+                            <p>File Transfer Jobs</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuration Breakdown -->
+                <div class="dashboard-section">
+                    <h2><i class="fas fa-cog"></i> Configuration Breakdown</h2>
+                    <div class="dashboard-charts">
+                        <!-- APPL Type Distribution -->
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3><i class="fas fa-code-branch"></i> APPL Type Distribution</h3>
+                                <p class="chart-subtitle">Jobs by application type (FILE_TRANS, OS, AWS, etc.)</p>
+                            </div>
+                            <div class="chart-body" id="chart-appl-types">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Task Type Distribution -->
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3><i class="fas fa-tasks"></i> Task Type Distribution</h3>
+                                <p class="chart-subtitle">Job types requiring migration</p>
+                            </div>
+                            <div class="chart-body" id="chart-task-types">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Applications & Folders -->
+                <div class="dashboard-section">
+                    <h2><i class="fas fa-sitemap"></i> Top Applications & Folders</h2>
+                    <div class="dashboard-charts">
+                        <!-- Top Applications -->
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3><i class="fas fa-cube"></i> Top 10 Applications</h3>
+                                <p class="chart-subtitle">Applications with most jobs</p>
+                            </div>
+                            <div class="chart-body" id="chart-applications">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Top Folders -->
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3><i class="fas fa-folder-open"></i> Top 10 Folders</h3>
+                                <p class="chart-subtitle">Folders with most jobs</p>
+                            </div>
+                            <div class="chart-body" id="chart-folders">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Migration Recommendations -->
+                <div class="dashboard-section">
+                    <h2><i class="fas fa-lightbulb"></i> Migration Recommendations</h2>
+                    <div class="recommendation-grid">
+                        <div class="recommendation-card">
+                            <div class="recommendation-icon" style="background: #dbeafe;">
+                                <i class="fas fa-check-circle" style="color: #2563eb;"></i>
+                            </div>
+                            <div class="recommendation-content">
+                                <h4>Start with Simple Jobs</h4>
+                                <p>Begin migration with jobs that have low complexity (few dependencies and resources)</p>
+                            </div>
+                        </div>
+                        <div class="recommendation-card">
+                            <div class="recommendation-icon" style="background: #fef3c7;">
+                                <i class="fas fa-exclamation-circle" style="color: #f59e0b;"></i>
+                            </div>
+                            <div class="recommendation-content">
+                                <h4>Review Critical Jobs</h4>
+                                <p>Critical jobs require extra attention and thorough testing during migration</p>
+                            </div>
+                        </div>
+                        <div class="recommendation-card">
+                            <div class="recommendation-icon" style="background: #fee2e2;">
+                                <i class="fas fa-project-diagram" style="color: #ef4444;"></i>
+                            </div>
+                            <div class="recommendation-content">
+                                <h4>Map Dependencies</h4>
+                                <p>Document all job dependencies before migration to ensure workflow continuity</p>
+                            </div>
+                        </div>
+                        <div class="recommendation-card">
+                            <div class="recommendation-icon" style="background: #dcfce7;">
+                                <i class="fas fa-code" style="color: #10b981;"></i>
+                            </div>
+                            <div class="recommendation-content">
+                                <h4>Analyze CLI Jobs</h4>
+                                <p>Command-line jobs may need script updates or containerization</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Jobs Page -->
+            <!-- Jobs Page -->
+            <div id="jobs-page" class="content-page">
+                <!-- Modern Page Header -->
+                <div class="page-header-modern">
+                    <div class="page-title-section">
+                        <h1><i class="fas fa-briefcase"></i> Jobs Explorer</h1>
+                        <p class="page-subtitle">Search and analyze Control-M jobs with advanced filters</p>
+                    </div>
+                    <div class="page-stats">
+                        <div class="stat-chip">
+                            <i class="fas fa-database"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="total-jobs-stat">0</span>
+                                <span class="stat-label">Total Jobs</span>
+                            </div>
+                        </div>
+                        <div class="stat-chip">
+                            <i class="fas fa-filter"></i>
+                            <div class="stat-content">
+                                <span class="stat-value" id="filtered-jobs-stat">0</span>
+                                <span class="stat-label">Filtered</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Filters Card -->
+                <div class="filter-card-modern">
+                    <div class="filter-card-header">
+                        <div class="filter-card-title">
+                            <i class="fas fa-sliders-h"></i>
+                            <h3>Advanced Filters</h3>
+                            <button class="btn-collapse" id="toggle-filters" type="button">
+                                <i class="fas fa-chevron-up"></i>
+                            </button>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button class="btn btn-secondary btn-sm" id="reset-btn" type="button">
+                                <i class="fas fa-redo"></i> Reset
+                            </button>
+                            <button class="btn btn-primary btn-sm" id="search-btn" type="button">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-card-body" id="filter-body">
+                        <!-- Basic Search Section -->
+                        <div class="filter-section">
+                            <div class="filter-section-title">
+                                <i class="fas fa-search"></i>
+                                <span>Basic Search</span>
+                            </div>
+                            <div class="filter-grid-3">
+                                <div class="form-group-modern">
+                                    <label for="filter-job-name">
+                                        <i class="fas fa-tag"></i> Job Name
+                                    </label>
+                                    <input type="text" id="filter-job-name" placeholder="Search by job name..." class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-folder">
+                                        <i class="fas fa-folder"></i> Folder
+                                    </label>
+                                    <select id="filter-folder" class="select2-dropdown select-modern">
+                                        <option value="">All Folders</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-application">
+                                        <i class="fas fa-cube"></i> Application
+                                    </label>
+                                    <select id="filter-application" class="select2-dropdown select-modern">
+                                        <option value="">All Applications</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Configuration Section -->
+                        <div class="filter-section">
+                            <div class="filter-section-title">
+                                <i class="fas fa-cog"></i>
+                                <span>Configuration</span>
+                            </div>
+                            <div class="filter-grid-4">
+                                <div class="form-group-modern">
+                                    <label for="filter-appl-type">
+                                        <i class="fas fa-code-branch"></i> APPL Type
+                                    </label>
+                                    <select id="filter-appl-type" class="select2-dropdown select-modern">
+                                        <option value="">All Types</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-appl-ver">
+                                        <i class="fas fa-code-branch"></i> APPL Version
+                                    </label>
+                                    <select id="filter-appl-ver" class="select2-dropdown select-modern">
+                                        <option value="">All Versions</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-task-type">
+                                        <i class="fas fa-tasks"></i> Task Type
+                                    </label>
+                                    <select id="filter-task-type" class="select2-dropdown select-modern">
+                                        <option value="">All Task Types</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-critical">
+                                        <i class="fas fa-exclamation-triangle"></i> Critical
+                                    </label>
+                                    <select id="filter-critical" class="select-modern">
+                                        <option value="">All</option>
+                                        <option value="true">Critical Only</option>
+                                        <option value="false">Non-Critical</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dependencies & Resources Section -->
+                        <div class="filter-section">
+                            <div class="filter-section-title">
+                                <i class="fas fa-project-diagram"></i>
+                                <span>Dependencies & Resources</span>
+                            </div>
+                            <div class="filter-grid-4">
+                                <div class="form-group-modern">
+                                    <label for="filter-min-deps">
+                                        <i class="fas fa-arrow-down"></i> Min Dependencies
+                                    </label>
+                                    <input type="number" id="filter-min-deps" placeholder="Min" min="0" class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-max-deps">
+                                        <i class="fas fa-arrow-up"></i> Max Dependencies
+                                    </label>
+                                    <input type="number" id="filter-max-deps" placeholder="Max" min="0" class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-min-on-conds">
+                                        <i class="fas fa-arrow-down"></i> Min ON Conditions
+                                    </label>
+                                    <input type="number" id="filter-min-on-conds" placeholder="Min" min="0" class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-max-on-conds">
+                                        <i class="fas fa-arrow-up"></i> Max ON Conditions
+                                    </label>
+                                    <input type="number" id="filter-max-on-conds" placeholder="Max" min="0" class="input-modern">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-has-variables">
+                                        <i class="fas fa-dollar-sign"></i> Has Variables
+                                    </label>
+                                    <select id="filter-has-variables" class="select-modern">
+                                        <option value="">Any</option>
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-min-variables">
+                                        <i class="fas fa-dollar-sign"></i> Min Variables
+                                    </label>
+                                    <input type="number" id="filter-min-variables" placeholder="Min" min="0" class="input-modern">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Active Filters Display -->
+                    <div class="active-filters-bar" id="active-filters" style="display: none;">
+                        <div class="active-filters-label">
+                            <i class="fas fa-filter"></i> Active Filters:
+                        </div>
+                        <div class="filter-chips" id="filter-chips"></div>
+                        <button class="btn-clear-all" onclick="resetFilters()" type="button">
+                            <i class="fas fa-times-circle"></i> Clear All
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div class="results-card-modern">
+                    <div class="results-card-header">
+                        <div class="results-info-section">
+                            <h3><i class="fas fa-list"></i> Search Results</h3>
+                            <span class="results-count" id="results-info">No results</span>
+                        </div>
+                        <div class="results-card-actions">
+                            <div class="per-page-selector">
+                                <label>Show:</label>
+                                <select id="per-page" class="select-modern-sm">
+                                    <option value="25">25</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                    <option value="200">200</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-success btn-sm" id="export-csv-btn" type="button">
+                                <i class="fas fa-file-csv"></i> Export CSV
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container-modern">
+                        <table class="data-table-modern" id="jobs-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="job_name">Job Name <i class="fas fa-sort"></i></th>
+                                    <th data-sort="folder_name">Folder <i class="fas fa-sort"></i></th>
+                                    <th data-sort="application">Application <i class="fas fa-sort"></i></th>
+                                    <th data-sort="sub_application">Sub App <i class="fas fa-sort"></i></th>
+                                    <th data-sort="appl_type">APPL Type <i class="fas fa-sort"></i></th>
+                                    <th data-sort="appl_ver">APPL Ver <i class="fas fa-sort"></i></th>
+                                    <th data-sort="task_type">Task Type <i class="fas fa-sort"></i></th>
+                                    <th data-sort="critical">Critical <i class="fas fa-sort"></i></th>
+                                    <th>Owner</th>
+                                    <th>Resources</th>
+                                    <th>Variables</th>
+                                    <th>In Deps</th>
+                                    <th>Out Deps</th>
+                                    <th>ON Conds</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobs-table-body">
+                                <tr>
+                                    <td colspan="15" class="text-center">
+                                        <div class="loading-state">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading...
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="table-footer-modern">
+                        <div class="pagination" id="pagination"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Job Detail Modal -->
+        <div id="job-detail-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modal-job-name">Job Details</h2>
+                    <button class="close-modal" onclick="closeJobDetailModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="modal-job-details">
+                        <div class="loading">
+                            <i class="fas fa-spinner fa-spin"></i> Loading...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Job Dependency Graph Modal -->
+        <div id="graph-modal" class="modal graph-modal">
+            <div class="graph-modal-content">
+                <div class="graph-modal-header">
+                    <div>
+                        <h2>Job Dependency Graph</h2>
+                        <div class="graph-info">
+                            <div class="graph-info-item">
+                                <i class="fas fa-briefcase"></i>
+                                <span id="graph-job-name"></span>
+                            </div>
+                            <div class="graph-info-item">
+                                <i class="fas fa-folder"></i>
+                                <span id="graph-job-folder"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="close-modal" onclick="closeGraphModal()" style="color: white; border-color: rgba(255,255,255,0.3);">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="graph-controls">
+                    <button onclick="fitGraphToScreen()">
+                        <i class="fas fa-compress-arrows-alt"></i> Fit to Screen
+                    </button>
+                    <button onclick="zoomIn()">
+                        <i class="fas fa-search-plus"></i> Zoom In
+                    </button>
+                    <button onclick="zoomOut()">
+                        <i class="fas fa-search-minus"></i> Zoom Out
+                    </button>
+                    <button onclick="resetGraph()">
+                        <i class="fas fa-redo"></i> Reset
+                    </button>
+                </div>
+                <div class="graph-modal-body">
+                    <div class="graph-sidebar">
+                        <div class="graph-stats">
+                            <h3>Statistics</h3>
+                            <div class="stat-item">
+                                <span class="stat-label">Total Nodes</span>
+                                <span class="stat-value" id="stat-nodes">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total Edges</span>
+                                <span class="stat-value" id="stat-edges">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Dependencies (In)</span>
+                                <span class="stat-value" id="stat-deps-in">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Dependents (Out)</span>
+                                <span class="stat-value" id="stat-deps-out">0</span>
+                            </div>
+                        </div>
+                        <div class="graph-legend">
+                            <h3>Legend</h3>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #4CAF50;"></div>
+                                <span class="legend-label">Current Job</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #2196F3;"></div>
+                                <span class="legend-label">Dependencies (In)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #FF9800;"></div>
+                                <span class="legend-label">Dependents (Out)</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="graph-container" class="graph-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="spinner-container">
+                <i class="fas fa-spinner fa-spin spinner"></i>
+                <div class="loading-text">Searching jobs...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
