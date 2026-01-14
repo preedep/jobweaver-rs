@@ -506,6 +506,9 @@ function renderJobsTable(data) {
                 });
             }
         }
+        
+        // Initialize column resize
+        initializeColumnResize();
     }, 100);
 }
 
@@ -678,6 +681,70 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Column Resize Functionality
+function initializeColumnResize() {
+    const table = document.getElementById('jobs-table');
+    if (!table) return;
+    
+    const headers = table.querySelectorAll('th');
+    headers.forEach((header, index) => {
+        // Skip last column (Actions)
+        if (index === headers.length - 1) return;
+        
+        // Add resize handle
+        const resizeHandle = document.createElement('div');
+        resizeHandle.className = 'resize-handle';
+        header.appendChild(resizeHandle);
+        
+        let startX, startWidth;
+        
+        resizeHandle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            startX = e.pageX;
+            startWidth = header.offsetWidth;
+            
+            resizeHandle.classList.add('resizing');
+            header.classList.add('resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            
+            const onMouseMove = (e) => {
+                const diff = e.pageX - startX;
+                const newWidth = Math.max(100, startWidth + diff);
+                header.style.width = newWidth + 'px';
+                header.style.minWidth = newWidth + 'px';
+                
+                // Update corresponding td cells
+                const columnIndex = Array.from(header.parentElement.children).indexOf(header);
+                const rows = table.querySelectorAll('tbody tr');
+                rows.forEach(row => {
+                    const cell = row.children[columnIndex];
+                    if (cell) {
+                        cell.style.width = newWidth + 'px';
+                        cell.style.minWidth = newWidth + 'px';
+                        cell.style.maxWidth = newWidth + 'px';
+                    }
+                });
+            };
+            
+            const onMouseUp = () => {
+                resizeHandle.classList.remove('resizing');
+                header.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    });
 }
 
 async function exportToCSV() {

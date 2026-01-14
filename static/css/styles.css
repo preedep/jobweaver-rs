@@ -613,6 +613,41 @@ body {
     z-index: 10;
     white-space: nowrap;
     box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+    position: relative;
+    min-width: 100px;
+}
+
+.data-table th .resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 11;
+}
+
+.data-table th .resize-handle::after {
+    content: '';
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 60%;
+    background: transparent;
+    transition: background 0.2s;
+}
+
+.data-table th .resize-handle:hover::after,
+.data-table th .resize-handle.resizing::after {
+    background: var(--primary-color);
+}
+
+.data-table th.resizing {
+    user-select: none;
+    cursor: col-resize;
 }
 
 .data-table th:hover {
