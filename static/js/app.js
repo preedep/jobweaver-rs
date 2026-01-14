@@ -454,62 +454,92 @@ function showLoading(show) {
 }
 
 function renderJobsTable(data) {
+    updateResultsInfo(data);
+    
     const tbody = document.getElementById('jobs-table-body');
-    const resultsInfo = document.getElementById('results-info');
-    
-    resultsInfo.textContent = `Showing ${data.jobs.length} of ${data.total} results`;
-    
     if (data.jobs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">No jobs found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center">No jobs found</td></tr>';
         return;
     }
     
-    tbody.innerHTML = data.jobs.map(job => `
-        <tr>
-            <td title="${escapeHtml(job.job_name)}"><strong>${escapeHtml(job.job_name)}</strong></td>
-            <td title="${escapeHtml(job.folder_name)}">${escapeHtml(job.folder_name)}</td>
-            <td title="${escapeHtml(job.application || '-')}">${escapeHtml(job.application || '-')}</td>
-            <td title="${escapeHtml(job.appl_type || '-')}">${escapeHtml(job.appl_type || '-')}</td>
-            <td title="${escapeHtml(job.appl_ver || '-')}">${escapeHtml(job.appl_ver || '-')}</td>
-            <td title="${escapeHtml(job.task_type || '-')}">${escapeHtml(job.task_type || '-')}</td>
-            <td>
-                ${job.critical ? '<span class="badge badge-danger">Critical</span>' : '<span class="badge badge-success">Normal</span>'}
-            </td>
-            <td>
-                <span class="badge badge-info">${job.in_conditions_count} In</span>
-                <span class="badge badge-info">${job.out_conditions_count} Out</span>
-            </td>
-            <td>
-                <button class="btn btn-primary btn-icon btn-sm" onclick="viewJobDetail(${job.id})">
-                    <i class="fas fa-eye"></i> View
-                </button>
-            </td>
-        </tr>
-    `).join('');
-    
+    tbody.innerHTML = data.jobs.map(renderJobRow).join('');
     renderPagination(data);
-    
-    // Add scroll detection
+    initializeTableFeatures();
+}
+
+function updateResultsInfo(data) {
+    const resultsInfo = document.getElementById('results-info');
+    resultsInfo.textContent = `Showing ${data.jobs.length} of ${data.total} results`;
+}
+
+function renderJobRow(job) {
+    return `
+        <tr>
+            ${renderTableCell(job.job_name, true)}
+            ${renderTableCell(job.folder_name)}
+            ${renderTableCell(job.application)}
+            ${renderTableCell(job.appl_type)}
+            ${renderTableCell(job.appl_ver)}
+            ${renderTableCell(job.task_type)}
+            ${renderCriticalBadge(job.critical)}
+            ${renderConditionsBadges(job)}
+            ${renderActionButton(job.id)}
+        </tr>
+    `;
+}
+
+function renderTableCell(value, isBold = false) {
+    const displayValue = escapeHtml(value || '-');
+    const content = isBold ? `<strong>${displayValue}</strong>` : displayValue;
+    return `<td title="${displayValue}">${content}</td>`;
+}
+
+function renderCriticalBadge(isCritical) {
+    const badgeClass = isCritical ? 'badge-danger' : 'badge-success';
+    const badgeText = isCritical ? 'Critical' : 'Normal';
+    return `<td><span class="badge ${badgeClass}">${badgeText}</span></td>`;
+}
+
+function renderConditionsBadges(job) {
+    return `
+        <td>
+            <span class="badge badge-info">${job.in_conditions_count} In</span>
+            <span class="badge badge-info">${job.out_conditions_count} Out</span>
+        </td>
+    `;
+}
+
+function renderActionButton(jobId) {
+    return `
+        <td>
+            <button class="btn btn-primary btn-icon btn-sm" onclick="viewJobDetail(${jobId})">
+                <i class="fas fa-eye"></i> View
+            </button>
+        </td>
+    `;
+}
+
+function initializeTableFeatures() {
     setTimeout(() => {
-        const tableWrapper = document.querySelector('.table-wrapper');
-        if (tableWrapper) {
-            const hasScroll = tableWrapper.scrollWidth > tableWrapper.clientWidth;
-            if (hasScroll) {
-                tableWrapper.classList.add('has-scroll');
-                tableWrapper.addEventListener('scroll', function() {
-                    const isNearEnd = this.scrollLeft >= (this.scrollWidth - this.clientWidth - 50);
-                    if (isNearEnd) {
-                        this.classList.remove('has-scroll');
-                    } else if (!this.classList.contains('has-scroll')) {
-                        this.classList.add('has-scroll');
-                    }
-                });
-            }
-        }
-        
-        // Initialize column resize
+        initializeScrollDetection();
         initializeColumnResize();
     }, 100);
+}
+
+function initializeScrollDetection() {
+    const tableWrapper = document.querySelector('.table-wrapper');
+    if (!tableWrapper) return;
+    
+    const hasScroll = tableWrapper.scrollWidth > tableWrapper.clientWidth;
+    if (!hasScroll) return;
+    
+    tableWrapper.classList.add('has-scroll');
+    tableWrapper.addEventListener('scroll', handleTableScroll);
+}
+
+function handleTableScroll() {
+    const isNearEnd = this.scrollLeft >= (this.scrollWidth - this.clientWidth - 50);
+    this.classList.toggle('has-scroll', !isNearEnd);
 }
 
 function renderPagination(data) {
