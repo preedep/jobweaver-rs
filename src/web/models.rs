@@ -211,6 +211,32 @@ pub struct ApiResponse<T> {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JobGraphData {
+    pub job_id: i64,
+    pub job_name: String,
+    pub folder_name: String,
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GraphNode {
+    pub id: i64,
+    pub label: String,
+    pub folder: String,
+    pub color: String,
+    pub is_current: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GraphEdge {
+    pub from: i64,
+    pub to: i64,
+    #[serde(rename = "type")]
+    pub edge_type: String,
+}
+
 impl<T> ApiResponse<T> {
     pub fn success(data: T) -> Self {
         Self {

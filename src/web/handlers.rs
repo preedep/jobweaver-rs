@@ -1,6 +1,7 @@
-use actix_web::{web, HttpResponse, HttpRequest, HttpMessage};
+use actix_web::{web, HttpResponse, HttpRequest, HttpMessage, Responder};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use std::sync::{Arc, Mutex};
+use tracing::{info, error, debug};
 
 use crate::web::auth::{AuthService, UserStore, Claims};
 use crate::web::models::*;
@@ -88,11 +89,17 @@ pub async fn get_current_user(
 }
 
 pub async fn search_jobs(
-    query: web::Query<JobSearchRequest>,
+    query: web::Json<JobSearchRequest>,
     repository: web::Data<Arc<JobRepository>>,
     _auth: BearerAuth,
 ) -> HttpResponse {
-    match repository.search_jobs(&query.into_inner()) {
+    let request = query.into_inner();
+    info!("🌐 [API] POST /jobs/search");
+    info!("📋 [API] Request body: job_name={:?}, folder={:?}, app={:?}, appl_type={:?}, appl_ver={:?}, task_type={:?}, critical={:?}",
+          request.job_name, request.folder_name, request.application, 
+          request.appl_type, request.appl_ver, request.task_type, request.critical);
+    
+    match repository.search_jobs(&request) {
         Ok(response) => HttpResponse::Ok().json(ApiResponse::success(response)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
             format!("Failed to search jobs: {}", e)
@@ -153,5 +160,34 @@ pub async fn export_jobs_csv(
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
             format!("Failed to export CSV: {}", e)
         )),
+    }
+}
+
+pub async fn get_job_graph(
+    repo: web::Data<Arc<JobRepository>>,
+    path: web::Path<i64>,
+) -> impl Responder {
+    let job_id = path.into_inner();
+    info!("🌐 [API] GET /jobs/{}/graph", job_id);
+    
+    match repo.get_job_graph(job_id) {
+        Ok(graph_data) => {
+            info!("✅ [API] Successfully retrieved graph for job_id={} ({} nodes, {} edges)", 
+                  job_id, graph_data.nodes.len(), graph_data.edges.len());
+            HttpResponse::Ok().json(ApiResponse {
+                success: true,
+                data: Some(graph_data),
+                error: None,
+            })
+        },
+        Err(e) => {
+            error!("❌ [API] Failed to get graph for job_id={}: {}", job_id, e);
+            error!("[API] Error details: {:?}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()> {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            })
+        },
     }
 }

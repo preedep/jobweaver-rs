@@ -17,6 +17,10 @@ impl JobRepository {
     }
 
     pub fn search_jobs(&self, request: &JobSearchRequest) -> Result<JobSearchResponse> {
+        tracing::info!("🔍 [SEARCH] Backend received search request");
+        tracing::debug!("[SEARCH] Request: job_name={:?}, folder={:?}, app={:?}, task_type={:?}", 
+                       request.job_name, request.folder_name, request.application, request.task_type);
+        
         let conn = self.conn.lock().unwrap();
         
         let page = request.page.unwrap_or(1);
@@ -24,10 +28,16 @@ impl JobRepository {
         let offset = (page - 1) * per_page;
         
         let (where_clause, params_vec) = self.build_where_clause(request);
+        tracing::info!("📋 [SEARCH] WHERE clause: {}", if where_clause.is_empty() { "(none)" } else { &where_clause });
+        tracing::debug!("[SEARCH] Params count: {}", params_vec.len());
+        
         let (sort_by, sort_order) = self.get_sort_params(request);
         
         let total = self.count_total_jobs(&conn, &where_clause, &params_vec)?;
+        tracing::info!("✅ [SEARCH] Found {} total jobs matching criteria", total);
+        
         let jobs = self.execute_search_query(&conn, &where_clause, &params_vec, &sort_by, &sort_order, per_page, offset)?;
+        tracing::info!("📦 [SEARCH] Returning {} jobs for page {}", jobs.len(), page);
         
         let total_pages = (total + per_page - 1) / per_page;
         
@@ -45,37 +55,37 @@ impl JobRepository {
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         
         if let Some(ref job_name) = request.job_name {
-            where_clauses.push("job_name LIKE ?");
+            where_clauses.push("j.job_name LIKE ?");
             params_vec.push(Box::new(format!("%{}%", job_name)));
         }
         
         if let Some(ref folder_name) = request.folder_name {
-            where_clauses.push("folder_name LIKE ?");
+            where_clauses.push("j.folder_name LIKE ?");
             params_vec.push(Box::new(format!("%{}%", folder_name)));
         }
         
         if let Some(ref application) = request.application {
-            where_clauses.push("application = ?");
+            where_clauses.push("j.application = ?");
             params_vec.push(Box::new(application.clone()));
         }
         
         if let Some(critical) = request.critical {
-            where_clauses.push("critical = ?");
+            where_clauses.push("j.critical = ?");
             params_vec.push(Box::new(if critical { 1 } else { 0 }));
         }
         
         if let Some(ref task_type) = request.task_type {
-            where_clauses.push("task_type = ?");
+            where_clauses.push("j.task_type = ?");
             params_vec.push(Box::new(task_type.clone()));
         }
         
         if let Some(ref appl_type) = request.appl_type {
-            where_clauses.push("appl_type = ?");
+            where_clauses.push("j.appl_type = ?");
             params_vec.push(Box::new(appl_type.clone()));
         }
         
         if let Some(ref appl_ver) = request.appl_ver {
-            where_clauses.push("appl_ver = ?");
+            where_clauses.push("j.appl_ver = ?");
             params_vec.push(Box::new(appl_ver.clone()));
         }
         
@@ -517,6 +527,16 @@ impl JobRepository {
     pub fn export_search_to_csv(&self, request: &JobSearchRequest) -> Result<String> {
         let conn = self.conn.lock().unwrap();
         
+        let (where_clause, params_vec) = self.build_csv_where_clause(request);
+        let query = self.build_csv_query(&where_clause);
+        
+        let rows = self.execute_csv_query(&conn, &query, &params_vec)?;
+        let csv_output = self.format_csv_output(rows)?;
+        
+        Ok(csv_output)
+    }
+    
+    fn build_csv_where_clause(&self, request: &JobSearchRequest) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
         let mut where_clauses = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         
@@ -561,7 +581,11 @@ impl JobRepository {
             format!("WHERE {}", where_clauses.join(" AND "))
         };
         
-        let query = format!(
+        (where_clause, params_vec)
+    }
+    
+    fn build_csv_query(&self, where_clause: &str) -> String {
+        format!(
             r#"
             SELECT 
                 j.job_name, j.folder_name, j.application, j.sub_application,
@@ -573,9 +597,16 @@ impl JobRepository {
             ORDER BY j.job_name
             "#,
             where_clause
-        );
-        
-        let mut stmt = conn.prepare(&query)?;
+        )
+    }
+    
+    fn execute_csv_query(
+        &self,
+        conn: &rusqlite::Connection,
+        query: &str,
+        params_vec: &[Box<dyn rusqlite::ToSql>],
+    ) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, String, String, Option<String>, i32, i32, Option<String>, Option<String>, Option<String>, Option<String>)>> {
+        let mut stmt = conn.prepare(query)?;
         let rows = stmt.query_map(
             rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
             |row| {
@@ -597,28 +628,212 @@ impl JobRepository {
             },
         )?;
         
-        let mut csv_output = String::from("Job Name,Folder,Application,Sub Application,APPL_TYPE,APPL_VER,Task Type,Critical,Cyclic,Owner,Priority,Description,Command Line\n");
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
+    }
+    
+    fn format_csv_output(
+        &self,
+        rows: Vec<(String, Option<String>, Option<String>, Option<String>, String, String, Option<String>, i32, i32, Option<String>, Option<String>, Option<String>, Option<String>)>,
+    ) -> Result<String> {
+        let mut csv_output = self.get_csv_header();
         
         for row in rows {
-            let (job_name, folder, app, sub_app, appl_type, appl_ver, task_type, critical, cyclic, owner, priority, desc, cmdline) = row?;
-            csv_output.push_str(&format!(
-                "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
-                job_name,
-                folder.unwrap_or_default(),
-                app.unwrap_or_default(),
-                sub_app.unwrap_or_default(),
-                appl_type,
-                appl_ver,
-                task_type.unwrap_or_default(),
-                if critical == 1 { "Yes" } else { "No" },
-                if cyclic == 1 { "Yes" } else { "No" },
-                owner.unwrap_or_default(),
-                priority.unwrap_or_default(),
-                desc.unwrap_or_default().replace("\"", "\"\""),
-                cmdline.unwrap_or_default().replace("\"", "\"\""),
-            ));
+            csv_output.push_str(&self.format_csv_row(row));
         }
         
         Ok(csv_output)
+    }
+    
+    fn get_csv_header(&self) -> String {
+        String::from("Job Name,Folder,Application,Sub Application,APPL_TYPE,APPL_VER,Task Type,Critical,Cyclic,Owner,Priority,Description,Command Line\n")
+    }
+    
+    fn format_csv_row(
+        &self,
+        row: (String, Option<String>, Option<String>, Option<String>, String, String, Option<String>, i32, i32, Option<String>, Option<String>, Option<String>, Option<String>),
+    ) -> String {
+        let (job_name, folder, app, sub_app, appl_type, appl_ver, task_type, critical, cyclic, owner, priority, desc, cmdline) = row;
+        
+        format!(
+            "\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
+            job_name,
+            folder.unwrap_or_default(),
+            app.unwrap_or_default(),
+            sub_app.unwrap_or_default(),
+            appl_type,
+            appl_ver,
+            task_type.unwrap_or_default(),
+            if critical == 1 { "Yes" } else { "No" },
+            if cyclic == 1 { "Yes" } else { "No" },
+            owner.unwrap_or_default(),
+            priority.unwrap_or_default(),
+            self.escape_csv_field(&desc.unwrap_or_default()),
+            self.escape_csv_field(&cmdline.unwrap_or_default())
+        )
+    }
+    
+    fn escape_csv_field(&self, field: &str) -> String {
+        field.replace("\"", "\"\"")
+    }
+
+    pub fn get_job_graph(&self, job_id: i64) -> Result<super::models::JobGraphData> {
+        tracing::info!("📊 [GRAPH] Fetching dependency graph for job_id={}", job_id);
+        let conn = self.conn.lock().unwrap();
+        
+        // Get the main job info
+        tracing::debug!("[GRAPH] Querying main job info for job_id={}", job_id);
+        let job = conn.query_row(
+            "SELECT id, job_name, folder_name FROM jobs WHERE id = ?",
+            [job_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?
+                ))
+            }
+        ).map_err(|e| {
+            tracing::error!("❌ [GRAPH] Failed to fetch job info for job_id={}: {}", job_id, e);
+            e
+        })?;
+        
+        tracing::info!("✅ [GRAPH] Found job: id={}, name='{}', folder='{}'", job.0, job.1, job.2);
+        
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        let mut visited_jobs = std::collections::HashSet::new();
+        
+        // Add current job as node
+        nodes.push(super::models::GraphNode {
+            id: job.0,
+            label: job.1.clone(),
+            folder: job.2.clone(),
+            color: "#4CAF50".to_string(),
+            is_current: true,
+        });
+        visited_jobs.insert(job.0);
+        
+        // Get incoming dependencies (jobs that this job depends on)
+        // Query in_conditions to find what this job depends on
+        tracing::debug!("[GRAPH] Querying incoming dependencies for job_id={}", job_id);
+        let in_query = "SELECT DISTINCT condition_name FROM in_conditions WHERE job_id = ?";
+        let mut in_stmt = conn.prepare(in_query)?;
+        let condition_names: Vec<String> = in_stmt
+            .query_map([job_id], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        tracing::info!("🔍 [GRAPH] Found {} condition names for incoming dependencies", condition_names.len());
+        
+        // Find jobs matching those condition names
+        for cond_name in condition_names {
+            tracing::debug!("[GRAPH] Looking for job matching condition_name='{}'", cond_name);
+            
+            // Try exact match first, then try stripping common suffixes
+            let base_name = cond_name
+                .trim_end_matches("-ENDED-OK")
+                .trim_end_matches("-ENDED-NOTOK")
+                .trim_end_matches("-ENDED")
+                .trim_end_matches("-OK")
+                .trim_end_matches("-NOTOK");
+            
+            let dep_job_result = conn.query_row(
+                "SELECT id, job_name, folder_name FROM jobs WHERE job_name = ? OR job_name = ? LIMIT 1",
+                [&cond_name, base_name],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?
+                    ))
+                }
+            );
+            
+            if let Ok(dep_job) = dep_job_result {
+                tracing::debug!("✅ [GRAPH] Matched incoming dep: id={}, name='{}' (from condition '{}')", 
+                               dep_job.0, dep_job.1, cond_name);
+                if !visited_jobs.contains(&dep_job.0) {
+                    nodes.push(super::models::GraphNode {
+                        id: dep_job.0,
+                        label: dep_job.1.clone(),
+                        folder: dep_job.2.clone(),
+                        color: "#2196F3".to_string(),
+                        is_current: false,
+                    });
+                    visited_jobs.insert(dep_job.0);
+                    tracing::debug!("[GRAPH] Added incoming dep node: {}", dep_job.1);
+                }
+                edges.push(super::models::GraphEdge {
+                    from: dep_job.0,
+                    to: job.0,
+                    edge_type: "in".to_string(),
+                });
+                tracing::debug!("[GRAPH] Added edge: {} -> {}", dep_job.1, job.1);
+            } else {
+                tracing::warn!("⚠️  [GRAPH] No job found matching condition_name='{}' or base_name='{}'", cond_name, base_name);
+            }
+        }
+        
+        // Get outgoing dependencies (jobs that depend on this job)
+        // Find jobs that have this job's name in their in_conditions
+        tracing::debug!("[GRAPH] Querying outgoing dependencies for job_name='{}'", job.1);
+        let out_query = "SELECT DISTINCT job_id FROM in_conditions WHERE condition_name = ?";
+        let mut out_stmt = conn.prepare(out_query).map_err(|e| {
+            tracing::error!("❌ [GRAPH] Failed to prepare outgoing deps query: {}", e);
+            e
+        })?;
+        let dependent_job_ids: Vec<i64> = out_stmt
+            .query_map([&job.1], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        tracing::info!("🔍 [GRAPH] Found {} jobs depending on '{}'", dependent_job_ids.len(), job.1);
+        
+        for dep_job_id in dependent_job_ids {
+            tracing::debug!("[GRAPH] Processing outgoing dep job_id={}", dep_job_id);
+            if let Ok(dep_job) = conn.query_row(
+                "SELECT id, job_name, folder_name FROM jobs WHERE id = ?",
+                [dep_job_id],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?
+                    ))
+                }
+            ) {
+                tracing::debug!("✅ [GRAPH] Matched outgoing dep: id={}, name='{}'", dep_job.0, dep_job.1);
+                if !visited_jobs.contains(&dep_job.0) {
+                    nodes.push(super::models::GraphNode {
+                        id: dep_job.0,
+                        label: dep_job.1.clone(),
+                        folder: dep_job.2.clone(),
+                        color: "#FF9800".to_string(),
+                        is_current: false,
+                    });
+                    visited_jobs.insert(dep_job.0);
+                    tracing::debug!("[GRAPH] Added outgoing dep node: {}", dep_job.1);
+                }
+                edges.push(super::models::GraphEdge {
+                    from: job.0,
+                    to: dep_job.0,
+                    edge_type: "out".to_string(),
+                });
+                tracing::debug!("[GRAPH] Added edge: {} -> {}", job.1, dep_job.1);
+            } else {
+                tracing::warn!("⚠️  [GRAPH] Failed to fetch job details for job_id={}", dep_job_id);
+            }
+        }
+        
+        tracing::info!("✅ [GRAPH] Graph complete: {} nodes, {} edges", nodes.len(), edges.len());
+        tracing::debug!("[GRAPH] Nodes: {:?}", nodes.iter().map(|n| &n.label).collect::<Vec<_>>());
+        
+        Ok(super::models::JobGraphData {
+            job_id: job.0,
+            job_name: job.1,
+            folder_name: job.2,
+            nodes,
+            edges,
+        })
     }
 }

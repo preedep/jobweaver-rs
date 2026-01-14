@@ -34,9 +34,13 @@ async function fetchCurrentUser() {
         if (response.ok) {
             const result = await response.json();
             currentUser = result.data;
-            document.getElementById('user-display-name').textContent = currentUser.display_name;
+            const userDisplay = document.getElementById('current-user');
+            if (userDisplay) {
+                userDisplay.textContent = currentUser.display_name || currentUser.username;
+            }
             showPage('main-app');
-            loadDashboard();
+            loadFilterOptions();
+            performSearch();
         } else {
             logout();
         }
@@ -50,7 +54,10 @@ function showPage(pageId) {
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
-    document.getElementById(pageId).classList.add('active');
+    const targetPage = document.getElementById(pageId);
+    if (targetPage) {
+        targetPage.classList.add('active');
+    }
 }
 
 // Event Listeners
@@ -69,10 +76,13 @@ function initializeEventListeners() {
     // Login form
     document.getElementById('login-form').addEventListener('submit', handleLogin);
     
-    // Entra ID login
-    document.getElementById('entra-login-btn').addEventListener('click', handleEntraLogin);
+    // Entra ID login button
+    const entraLoginBtn = document.getElementById('entra-login-btn');
+    if (entraLoginBtn) {
+        entraLoginBtn.addEventListener('click', handleEntraLogin);
+    }
     
-    // Logout
+    // Logout button
     document.getElementById('logout-btn').addEventListener('click', logout);
     
     // Navigation
@@ -130,6 +140,8 @@ async function handleLogin(e) {
     const password = document.getElementById('password').value;
     const errorDiv = document.getElementById('login-error');
     
+    errorDiv.style.display = 'none';
+    
     try {
         const response = await fetch(`${API_BASE}/auth/login`, {
             method: 'POST',
@@ -141,25 +153,48 @@ async function handleLogin(e) {
         
         const result = await response.json();
         
-        if (result.success) {
+        if (result.success && result.data) {
             authToken = result.data.token;
-            currentUser = result.data.user;
+            currentUser = result.data.user || { username: username, display_name: username };
             localStorage.setItem('authToken', authToken);
-            document.getElementById('user-display-name').textContent = currentUser.display_name;
+            
+            const userDisplay = document.getElementById('current-user');
+            if (userDisplay) {
+                userDisplay.textContent = currentUser.display_name || currentUser.username;
+            }
+            
             showPage('main-app');
-            loadDashboard();
+            loadFilterOptions();
+            performSearch();
         } else {
             errorDiv.textContent = result.error || 'Login failed';
             errorDiv.style.display = 'block';
         }
     } catch (error) {
+        console.error('Login error:', error);
         errorDiv.textContent = 'Network error. Please try again.';
         errorDiv.style.display = 'block';
     }
 }
 
 async function handleEntraLogin() {
-    alert('Entra ID authentication would redirect to Microsoft login page.\nFor demo purposes, this is not implemented.');
+    const errorDiv = document.getElementById('login-error');
+    
+    try {
+        // Note: Entra ID OAuth flow would typically redirect to Microsoft's endpoint
+        // For now, show a message that it's not configured
+        errorDiv.textContent = 'Entra ID login is not configured yet. Please use username/password to login.';
+        errorDiv.style.display = 'block';
+        errorDiv.style.color = '#f59e0b'; // Warning color
+        
+        // Example of what the redirect would look like when configured:
+        // window.location.href = `${API_BASE}/auth/entra-login`;
+    } catch (error) {
+        console.error('Entra ID login error:', error);
+        errorDiv.textContent = 'Failed to initiate Entra ID login.';
+        errorDiv.style.display = 'block';
+        errorDiv.style.color = '#ef4444'; // Error color
+    }
 }
 
 function logout() {
@@ -170,6 +205,8 @@ function logout() {
 }
 
 function switchContentPage(page) {
+    console.log(`🔄 [NAV] Switching to ${page} page`);
+    
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.remove('active');
     });
@@ -177,8 +214,11 @@ function switchContentPage(page) {
         p.classList.remove('active');
     });
     
-    document.querySelector(`[data-page="${page}"]`).classList.add('active');
-    document.getElementById(`${page}-page`).classList.add('active');
+    const navItem = document.querySelector(`[data-page="${page}"]`);
+    const pageElement = document.getElementById(`${page}-page`);
+    
+    if (navItem) navItem.classList.add('active');
+    if (pageElement) pageElement.classList.add('active');
     
     if (page === 'dashboard') {
         loadDashboard();
@@ -380,52 +420,62 @@ function resetFilters() {
 async function performSearch() {
     const startTime = performance.now();
     console.log('🔍 [SEARCH] Starting search operation...');
+    
     showLoading(true);
     
-    const jobName = document.getElementById('filter-job-name').value;
-    const folder = $('#filter-folder').val();
-    const application = $('#filter-application').val();
-    const applType = $('#filter-appl-type').val();
-    const applVer = $('#filter-appl-ver').val();
-    const taskType = document.getElementById('filter-task-type').value;
-    const critical = document.getElementById('filter-critical').value;
-    const minDeps = document.getElementById('filter-min-deps').value;
-    const maxDeps = document.getElementById('filter-max-deps').value;
-    const hasVars = document.getElementById('filter-has-variables').value;
-    const minVars = document.getElementById('filter-min-variables').value;
-    
     currentFilters = {};
+    
+    // Get filter values (use jQuery for Select2 dropdowns)
+    const jobName = document.getElementById('filter-job-name')?.value?.trim();
+    const folderName = $('#filter-folder').val(); // Select2
+    const application = $('#filter-application').val(); // Select2
+    const applType = $('#filter-appl-type').val(); // Select2
+    const applVer = $('#filter-appl-ver').val(); // Select2
+    const taskType = $('#filter-task-type').val(); // Select2
+    const critical = document.getElementById('filter-critical')?.value;
+    const minDeps = document.getElementById('filter-min-deps')?.value?.trim();
+    const maxDeps = document.getElementById('filter-max-deps')?.value?.trim();
+    const hasVars = document.getElementById('filter-has-variables')?.value;
+    const minVars = document.getElementById('filter-min-variables')?.value?.trim();
+    
+    console.log('🔍 [SEARCH] Raw filter values:', {
+        jobName, folderName, application, applType, applVer, taskType, 
+        critical, minDeps, maxDeps, hasVars, minVars
+    });
+    
+    // Build filters object
     if (jobName) currentFilters.job_name = jobName;
-    if (folder) currentFilters.folder_name = folder;
+    if (folderName) currentFilters.folder_name = folderName;
     if (application) currentFilters.application = application;
     if (applType) currentFilters.appl_type = applType;
     if (applVer) currentFilters.appl_ver = applVer;
     if (taskType) currentFilters.task_type = taskType;
-    if (critical) currentFilters.critical = critical === 'true';
+    if (critical && critical !== '') currentFilters.critical = critical === 'true';
     if (minDeps) currentFilters.min_dependencies = parseInt(minDeps);
     if (maxDeps) currentFilters.max_dependencies = parseInt(maxDeps);
-    if (hasVars) currentFilters.has_variables = hasVars === 'true';
+    if (hasVars && hasVars !== '') currentFilters.has_variables = hasVars === 'true';
     if (minVars) currentFilters.min_variables = parseInt(minVars);
     
-    console.log('📋 [SEARCH] Filters:', currentFilters);
+    console.log('📋 [SEARCH] Filters to send:', currentFilters);
     console.log('📄 [SEARCH] Page:', currentPage, 'Per page:', currentPerPage);
-    
-    const params = new URLSearchParams({
-        ...currentFilters,
-        page: currentPage,
-        per_page: currentPerPage,
-        sort_by: currentSort.by,
-        sort_order: currentSort.order
-    });
     
     try {
         console.log('🌐 [SEARCH] Sending API request...');
         const fetchStart = performance.now();
         
-        const response = await fetch(`${API_BASE}/jobs/search?${params}`, {
+        const response = await fetch(`${API_BASE}/jobs/search`, {
+            method: 'POST',
             headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                ...currentFilters,
+                page: currentPage,
+                per_page: currentPerPage,
+                sort_by: currentSort.by,
+                sort_order: currentSort.order
+            })
         });
         
         const fetchEnd = performance.now();
@@ -558,8 +608,11 @@ function renderConditionsBadges(job) {
 function renderActionButton(jobId) {
     return `
         <td>
-            <button class="btn btn-primary btn-icon btn-sm" onclick="viewJobDetail(${jobId})">
-                <i class="fas fa-eye"></i> View
+            <button class="btn btn-primary btn-icon btn-sm" onclick="viewJobDetail(${jobId})" title="View Details">
+                <i class="fas fa-eye"></i>
+            </button>
+            <button class="btn btn-success btn-icon btn-sm" onclick="showJobGraph(${jobId})" title="Show Dependency Graph">
+                <i class="fas fa-project-diagram"></i>
             </button>
         </td>
     `;
@@ -901,6 +954,223 @@ async function exportToCSV() {
     }
 }
 
+// Job Dependency Graph
+let currentNetwork = null;
+
+async function showJobGraph(jobId) {
+    const modal = document.getElementById('graph-modal');
+    const graphContainer = document.getElementById('graph-container');
+    
+    modal.classList.add('active');
+    graphContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading graph...</div></div>';
+    
+    try {
+        const response = await fetch(`${API_BASE}/jobs/${jobId}/graph`, {
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to load graph data');
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+            renderJobGraph(result.data);
+        } else {
+            graphContainer.innerHTML = '<div style="padding: 40px; text-align: center;"><p class="error">Failed to load graph data</p></div>';
+        }
+    } catch (error) {
+        console.error('Error loading job graph:', error);
+        graphContainer.innerHTML = '<div style="padding: 40px; text-align: center;"><p class="error">Error loading graph: ' + error.message + '</p></div>';
+    }
+}
+
+function renderJobGraph(graphData) {
+    const graphContainer = document.getElementById('graph-container');
+    
+    // Update header info
+    document.getElementById('graph-job-name').textContent = graphData.job_name;
+    document.getElementById('graph-job-folder').textContent = graphData.folder_name;
+    
+    const depsIn = graphData.edges.filter(e => e.edge_type === 'in').length;
+    const depsOut = graphData.edges.filter(e => e.edge_type === 'out').length;
+    
+    document.getElementById('stat-nodes').textContent = graphData.nodes.length;
+    document.getElementById('stat-edges').textContent = graphData.edges.length;
+    document.getElementById('stat-deps-in').textContent = depsIn;
+    document.getElementById('stat-deps-out').textContent = depsOut;
+    
+    const nodes = new vis.DataSet(graphData.nodes.map(node => ({
+        id: node.id,
+        label: node.label,
+        color: {
+            background: node.color,
+            border: node.is_current ? '#2d5016' : (node.color === '#2196F3' ? '#0d47a1' : '#e65100'),
+            highlight: {
+                background: node.color,
+                border: '#000000'
+            }
+        },
+        font: { 
+            size: 16, 
+            color: '#ffffff',
+            face: 'Arial',
+            bold: node.is_current
+        },
+        title: `<b>${node.label}</b><br/>Folder: ${node.folder}`,
+        borderWidth: node.is_current ? 4 : 2,
+        shadow: true
+    })));
+    
+    const edges = new vis.DataSet(graphData.edges.map(edge => ({
+        from: edge.from,
+        to: edge.to,
+        arrows: {
+            to: {
+                enabled: true,
+                scaleFactor: 1.2
+            }
+        },
+        color: { 
+            color: edge.edge_type === 'in' ? '#2196F3' : '#FF9800',
+            highlight: '#000000'
+        },
+        width: 3,
+        smooth: {
+            type: 'cubicBezier',
+            roundness: 0.5
+        }
+    })));
+    
+    const data = { nodes, edges };
+    
+    const options = {
+        layout: {
+            hierarchical: {
+                direction: 'UD',
+                sortMethod: 'directed',
+                nodeSpacing: 200,
+                levelSeparation: 250,
+                treeSpacing: 250
+            }
+        },
+        physics: {
+            enabled: false
+        },
+        interaction: {
+            dragNodes: true,
+            dragView: true,
+            zoomView: true,
+            hover: true,
+            tooltipDelay: 100,
+            navigationButtons: false
+        },
+        nodes: {
+            shape: 'box',
+            margin: 15,
+            widthConstraint: {
+                minimum: 150,
+                maximum: 250
+            },
+            heightConstraint: {
+                minimum: 40
+            }
+        }
+    };
+    
+    if (currentNetwork) {
+        currentNetwork.destroy();
+    }
+    
+    currentNetwork = new vis.Network(graphContainer, data, options);
+    
+    currentNetwork.once('stabilizationIterationsDone', function() {
+        currentNetwork.fit({
+            animation: {
+                duration: 1000,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+    });
+}
+
+function closeGraphModal() {
+    const modal = document.getElementById('graph-modal');
+    modal.classList.remove('active');
+    
+    if (currentNetwork) {
+        currentNetwork.destroy();
+        currentNetwork = null;
+    }
+}
+
+function fitGraphToScreen() {
+    if (currentNetwork) {
+        currentNetwork.fit({
+            animation: {
+                duration: 500,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+    }
+}
+
+function zoomIn() {
+    if (currentNetwork) {
+        const scale = currentNetwork.getScale();
+        currentNetwork.moveTo({
+            scale: scale * 1.2,
+            animation: {
+                duration: 300,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+    }
+}
+
+function zoomOut() {
+    if (currentNetwork) {
+        const scale = currentNetwork.getScale();
+        currentNetwork.moveTo({
+            scale: scale * 0.8,
+            animation: {
+                duration: 300,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+    }
+}
+
+function resetGraph() {
+    if (currentNetwork) {
+        currentNetwork.moveTo({
+            position: {x: 0, y: 0},
+            scale: 1.0,
+            animation: {
+                duration: 500,
+                easingFunction: 'easeInOutQuad'
+            }
+        });
+    }
+}
+
+function closeJobDetailModal() {
+    const modal = document.getElementById('job-detail-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
 // Make functions global for onclick handlers
 window.goToPage = goToPage;
 window.viewJobDetail = viewJobDetail;
+window.showJobGraph = showJobGraph;
+window.closeGraphModal = closeGraphModal;
+window.closeJobDetailModal = closeJobDetailModal;
+window.fitGraphToScreen = fitGraphToScreen;
+window.zoomIn = zoomIn;
+window.zoomOut = zoomOut;
+window.resetGraph = resetGraph;
