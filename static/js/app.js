@@ -919,6 +919,9 @@ function renderJobRow(job) {
     const criticalBadge = job.critical 
         ? '<span class="badge badge-danger">Yes</span>' 
         : '<span class="badge badge-success">No</span>';
+    const cyclicBadge = job.cyclic 
+        ? '<span class="badge badge-warning">Yes</span>' 
+        : '<span class="badge badge-secondary">No</span>';
     
     return `
         <tr>
@@ -932,7 +935,14 @@ function renderJobRow(job) {
             <td>${escapeHtml(job.appl_ver || '-')}</td>
             <td>${escapeHtml(job.task_type || '-')}</td>
             <td>${criticalBadge}</td>
+            <td>${cyclicBadge}</td>
+            <td><span title="${escapeHtml(job.node_id || '')}">${escapeHtml(job.node_id || '-')}</span></td>
+            <td>${escapeHtml(job.group || '-')}</td>
+            <td>${escapeHtml(job.memname || '-')}</td>
             <td>${escapeHtml(job.owner || '-')}</td>
+            <td>${job.maxwait !== null && job.maxwait !== undefined ? job.maxwait : '-'}</td>
+            <td>${job.maxrerun !== null && job.maxrerun !== undefined ? job.maxrerun : '-'}</td>
+            <td>${escapeHtml(job.shift || '-')}</td>
             <td><span class="badge badge-info">${job.control_resources_count || 0}</span></td>
             <td><span class="badge badge-info">${job.variables_count || 0}</span></td>
             <td><span class="badge badge-success">${job.in_conditions_count || 0}</span></td>
@@ -1020,10 +1030,19 @@ function goToPage(page) {
  */
 async function viewJobDetail(jobId) {
     const modal = document.getElementById('job-detail-modal');
-    const modalBody = document.getElementById('modal-job-details');
     
     modal.classList.add('active');
-    modalBody.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    
+    // Reset to first tab
+    if (typeof switchTab === 'function') {
+        switchTab('basic');
+    }
+    
+    // Show loading in basic tab
+    const basicTab = document.getElementById('tab-basic');
+    if (basicTab) {
+        basicTab.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    }
     
     try {
         const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
@@ -1035,31 +1054,45 @@ async function viewJobDetail(jobId) {
         const result = await response.json();
         
         if (result.success) {
-            renderJobDetail(result.data);
-        } else {
-            modalBody.innerHTML = '<p class="text-center text-muted">Failed to load job details</p>';
+            const job = result.data;
+            
+            // Update modal header
+            document.getElementById('modal-job-name').textContent = job.job.job_name;
+            const subtitle = document.getElementById('modal-job-subtitle');
+            if (subtitle) {
+                subtitle.textContent = `${job.job.folder_name} • ${job.job.application || 'N/A'}`;
+            }
+            
+            // Populate all tabs using functions from modal-enhanced.js
+            if (typeof populateBasicTab === 'function') populateBasicTab(job);
+            if (typeof populateSchedulingTab === 'function') populateSchedulingTab(job);
+            if (typeof populateLimitsTab === 'function') populateLimitsTab(job);
+            if (typeof populateDependenciesTab === 'function') populateDependenciesTab(job);
+            if (typeof populateVariablesTab === 'function') populateVariablesTab(job);
+            if (typeof populateMetadataTab === 'function') populateMetadataTab(job);
         }
     } catch (error) {
-        console.error('Failed to load job detail:', error);
-        modalBody.innerHTML = '<p class="text-center text-muted">Failed to load job details</p>';
+        console.error('Error loading job details:', error);
+        const basicTab = document.getElementById('tab-basic');
+        if (basicTab) {
+            basicTab.innerHTML = '<div class="error">Failed to load job details</div>';
+        }
     }
 }
 
 /**
- * Renders job detail information in the modal
+ * Populates the basic tab with job information
  * 
- * @param {Object} data - Job detail data from API
- * @param {Object} data.job - Job object
- * @param {Array} data.in_conditions - Input conditions
- * @param {Array} data.out_conditions - Output conditions
- * @param {Array} data.variables - Job variables
+ * @param {Object} job - Job data object
  */
-function renderJobDetail(data) {
-    const job = data.job;
-    const modalName = document.getElementById('modal-job-name');
-    const modalBody = document.getElementById('modal-job-details');
-    
-    modalName.textContent = job.job_name;
+function populateBasicTab(job) {
+    const basicTab = document.getElementById('tab-basic');
+    const jobName = job.job.job_name;
+    const folderName = job.job.folder_name;
+    const application = job.job.application || '-';
+    const taskType = job.job.task_type || '-';
+    const owner = job.job.owner || '-';
+    const critical = job.job.critical ? 'Yes' : 'No';
     
     let html = `
         <div class="detail-section">
@@ -1067,84 +1100,51 @@ function renderJobDetail(data) {
             <div class="detail-grid">
                 <div class="detail-item">
                     <div class="detail-label">Job Name</div>
-                    <div class="detail-value">${escapeHtml(job.job_name)}</div>
+                    <div class="detail-value">${escapeHtml(jobName)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Folder</div>
-                    <div class="detail-value">${escapeHtml(job.folder_name)}</div>
+                    <div class="detail-value">${escapeHtml(folderName)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Application</div>
-                    <div class="detail-value">${escapeHtml(job.application || '-')}</div>
+                    <div class="detail-value">${escapeHtml(application)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Task Type</div>
-                    <div class="detail-value">${escapeHtml(job.task_type || '-')}</div>
+                    <div class="detail-value">${escapeHtml(taskType)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Owner</div>
-                    <div class="detail-value">${escapeHtml(job.owner || '-')}</div>
+                    <div class="detail-value">${escapeHtml(owner)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Critical</div>
-                    <div class="detail-value">${job.critical ? 'Yes' : 'No'}</div>
+                    <div class="detail-value">${critical}</div>
                 </div>
             </div>
         </div>
     `;
     
-    if (job.description) {
+    if (job.job.description) {
         html += `
             <div class="detail-section">
                 <h3>Description</h3>
-                <p>${escapeHtml(job.description)}</p>
+                <p>${escapeHtml(job.job.description)}</p>
             </div>
         `;
     }
     
-    if (job.cmdline) {
+    if (job.job.cmdline) {
         html += `
             <div class="detail-section">
                 <h3>Command Line</h3>
-                <pre style="background: #f3f4f6; padding: 12px; border-radius: 6px; overflow-x: auto;">${escapeHtml(job.cmdline)}</pre>
+                <pre style="background: #f3f4f6; padding: 12px; border-radius: 6px; overflow-x: auto;">${escapeHtml(job.job.cmdline)}</pre>
             </div>
         `;
     }
     
-    if (data.in_conditions && data.in_conditions.length > 0) {
-        html += `
-            <div class="detail-section">
-                <h3>In Conditions (${data.in_conditions.length})</h3>
-                <ul class="detail-list">
-                    ${data.in_conditions.map(c => `<li>${escapeHtml(c.condition_name)}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    if (data.out_conditions && data.out_conditions.length > 0) {
-        html += `
-            <div class="detail-section">
-                <h3>Out Conditions (${data.out_conditions.length})</h3>
-                <ul class="detail-list">
-                    ${data.out_conditions.map(c => `<li>${escapeHtml(c.condition_name)}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    if (data.variables && data.variables.length > 0) {
-        html += `
-            <div class="detail-section">
-                <h3>Variables (${data.variables.length})</h3>
-                <ul class="detail-list">
-                    ${data.variables.map(v => `<li><strong>${escapeHtml(v.name)}:</strong> ${escapeHtml(v.value)}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    modalBody.innerHTML = html;
+    basicTab.innerHTML = html;
 }
 
 // ============================================================================

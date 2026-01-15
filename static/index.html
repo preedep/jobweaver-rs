@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/modal-tabs.css">
 </head>
 <body>
     <!-- Login Page -->
@@ -515,7 +516,14 @@
                                     <th data-sort="appl_ver">APPL Ver <i class="fas fa-sort"></i></th>
                                     <th data-sort="task_type">Task Type <i class="fas fa-sort"></i></th>
                                     <th data-sort="critical">Critical <i class="fas fa-sort"></i></th>
+                                    <th data-sort="cyclic">Cyclic <i class="fas fa-sort"></i></th>
+                                    <th>Node ID</th>
+                                    <th>Group</th>
+                                    <th>Memname</th>
                                     <th>Owner</th>
+                                    <th>MaxWait</th>
+                                    <th>MaxRerun</th>
+                                    <th>Shift</th>
                                     <th>Resources</th>
                                     <th>Variables</th>
                                     <th>In Deps</th>
@@ -526,7 +534,7 @@
                             </thead>
                             <tbody id="jobs-table-body">
                                 <tr>
-                                    <td colspan="17" class="text-center">
+                                    <td colspan="23" class="text-center">
                                         <div class="loading-state">
                                             <i class="fas fa-spinner fa-spin"></i> Loading...
                                         </div>
@@ -543,19 +551,133 @@
             </div>
         </main>
 
-        <!-- Job Detail Modal -->
+        <!-- Enhanced Job Detail Modal -->
         <div id="job-detail-modal" class="modal">
-            <div class="modal-content">
+            <div class="modal-content modal-content-large">
                 <div class="modal-header">
-                    <h2 id="modal-job-name">Job Details</h2>
+                    <div>
+                        <h2 id="modal-job-name">Job Details</h2>
+                        <p class="modal-subtitle" id="modal-job-subtitle"></p>
+                    </div>
                     <button class="close-modal" onclick="closeJobDetailModal()">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
+                
+                <!-- Tab Navigation -->
+                <div class="modal-tabs">
+                    <button class="tab-button active" data-tab="basic">
+                        <i class="fas fa-info-circle"></i> Basic Info
+                    </button>
+                    <button class="tab-button" data-tab="scheduling">
+                        <i class="fas fa-calendar-alt"></i> Scheduling
+                    </button>
+                    <button class="tab-button" data-tab="limits">
+                        <i class="fas fa-sliders-h"></i> Limits & Settings
+                    </button>
+                    <button class="tab-button" data-tab="dependencies">
+                        <i class="fas fa-project-diagram"></i> Dependencies
+                    </button>
+                    <button class="tab-button" data-tab="variables">
+                        <i class="fas fa-code"></i> Variables & Actions
+                    </button>
+                    <button class="tab-button" data-tab="metadata">
+                        <i class="fas fa-tags"></i> Metadata
+                    </button>
+                </div>
+                
                 <div class="modal-body">
-                    <div id="modal-job-details">
+                    <!-- Tab Content -->
+                    <div id="tab-basic" class="tab-content active">
                         <div class="loading">
                             <i class="fas fa-spinner fa-spin"></i> Loading...
+                        </div>
+                    </div>
+                    
+                    <div id="tab-scheduling" class="tab-content">
+                        <div class="detail-section">
+                            <h3>Time Windows</h3>
+                            <div class="detail-grid" id="scheduling-time"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Days & Calendars</h3>
+                            <div class="detail-grid" id="scheduling-days"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Months</h3>
+                            <div class="detail-grid" id="scheduling-calendars"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Cyclic Settings</h3>
+                            <div class="detail-grid" id="scheduling-cyclic"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="tab-limits" class="tab-content">
+                        <div class="detail-section">
+                            <h3>Execution Limits</h3>
+                            <div class="detail-grid" id="limits-execution"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Shift & Priority</h3>
+                            <div class="detail-grid" id="limits-shift"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Other Settings</h3>
+                            <div class="detail-grid" id="limits-other"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="tab-dependencies" class="tab-content">
+                        <div class="detail-section">
+                            <h3>In Conditions <span class="badge badge-success" id="in-cond-count">0</span></h3>
+                            <div id="in-conditions-list"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Out Conditions <span class="badge badge-danger" id="out-cond-count">0</span></h3>
+                            <div id="out-conditions-list"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Control Resources <span class="badge badge-info" id="ctrl-res-count">0</span></h3>
+                            <div id="control-resources-list"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Quantitative Resources <span class="badge badge-warning" id="quant-res-count">0</span></h3>
+                            <div id="quantitative-resources-list"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="tab-variables" class="tab-content">
+                        <div class="detail-section">
+                            <h3>Variables <span class="badge badge-info" id="var-count">0</span></h3>
+                            <div id="variables-list"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>ON Conditions & Actions <span class="badge badge-warning" id="on-cond-count">0</span></h3>
+                            <div id="on-conditions-list"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Auto Edits</h3>
+                            <div id="auto-edits-list"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="tab-metadata" class="tab-content">
+                        <div class="detail-section">
+                            <h3>Creation Info</h3>
+                            <div class="detail-grid" id="metadata-creation"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Modification Info</h3>
+                            <div class="detail-grid" id="metadata-modification"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Version & Environment</h3>
+                            <div class="detail-grid" id="metadata-version"></div>
+                        </div>
+                        <div class="detail-section">
+                            <h3>Parent & Hierarchy</h3>
+                            <div class="detail-grid" id="metadata-hierarchy"></div>
                         </div>
                     </div>
                 </div>
@@ -652,5 +774,6 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/modal-enhanced.js"></script>
 </body>
 </html>
