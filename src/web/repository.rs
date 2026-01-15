@@ -50,92 +50,135 @@ impl JobRepository {
         })
     }
     
-    fn add_string_filter(
-        &self,
-        clauses: &mut Vec<&'static str>,
-        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
-        value: &Option<String>,
-        column: &'static str,
-        operator: &str,
-        filter_name: &str,
-    ) {
-        if let Some(ref val) = value {
-            tracing::debug!("  ➕ Adding {} filter: {}", filter_name, val);
-            if operator == "LIKE" {
-                clauses.push(column);
-                params.push(Box::new(format!("%{}%", val)));
-            } else {
-                clauses.push(column);
-                params.push(Box::new(val.clone()));
-            }
-        }
-    }
-
-    fn add_count_filter(
-        &self,
-        clauses: &mut Vec<&'static str>,
-        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
-        value: Option<i32>,
-        table: &'static str,
-        operator: &str,
-        filter_name: &str,
-        use_info_log: bool,
-    ) {
-        if let Some(val) = value {
-            if use_info_log {
-                tracing::info!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
-            } else {
-                tracing::debug!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
-            }
-            clauses.push(table);
-            params.push(Box::new(val));
-        }
-    }
 
     fn build_where_clause(&self, request: &JobSearchRequest) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
         tracing::debug!("🔨 [WHERE] Building WHERE clause for search");
         let mut where_clauses = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         
-        // Basic string filters
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.job_name, "j.job_name LIKE ?", "LIKE", "job_name");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.folder_name, "j.folder_name LIKE ?", "LIKE", "folder_name");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.application, "j.application = ?", "=", "application");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.task_type, "j.task_type = ?", "=", "task_type");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.appl_type, "j.appl_type = ?", "=", "appl_type");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.appl_ver, "j.appl_ver = ?", "=", "appl_ver");
+        // Apply all filter categories
+        self.apply_basic_filters(&mut where_clauses, &mut params_vec, request);
+        self.apply_folder_filters(&mut where_clauses, &mut params_vec, request);
+        self.apply_critical_filter(&mut where_clauses, &mut params_vec, request);
+        self.apply_dependency_filters(&mut where_clauses, &mut params_vec, request);
+        self.apply_odate_filter(&mut where_clauses, request);
+        self.apply_variable_filters(&mut where_clauses, &mut params_vec, request);
         
-        // Critical filter
-        if let Some(critical) = request.critical {
-            tracing::debug!("  ➕ Adding critical filter: {}", critical);
-            where_clauses.push("j.critical = ?");
-            params_vec.push(Box::new(if critical { 1 } else { 0 }));
-        }
+        self.format_where_clause(where_clauses, params_vec)
+    }
+    
+    fn apply_basic_filters(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        self.add_string_filter_owned(where_clauses, params_vec, &request.job_name, "j.job_name LIKE ?", "LIKE", "job_name");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.folder_name, "j.folder_name LIKE ?", "LIKE", "folder_name");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.application, "j.application = ?", "=", "application");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.task_type, "j.task_type = ?", "=", "task_type");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.appl_type, "j.appl_type = ?", "=", "appl_type");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.appl_ver, "j.appl_ver = ?", "=", "appl_ver");
+    }
+    
+    fn apply_folder_filters(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        // Datacenter filter
+        self.add_string_filter_owned(where_clauses, params_vec, &request.datacenter, 
+            "EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = ?)", "=", "datacenter");
         
-        // Dependency count filters
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_dependencies,
-            "(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) >= ?", ">=", "min_dependencies", false);
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.max_dependencies,
-            "(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) <= ?", "<=", "max_dependencies", false);
-        
-        // ON conditions count filters (use info log)
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_on_conditions,
-            "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) >= ?", ">=", "min_on_conditions", true);
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.max_on_conditions,
-            "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) <= ?", "<=", "max_on_conditions", true);
-        
-        // Variable filters
-        if let Some(has_vars) = request.has_variables {
-            tracing::debug!("  ➕ Adding has_variables filter: {}", has_vars);
-            if has_vars {
-                where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) > 0");
+        // Folder order method with special "(Empty)" handling
+        if let Some(ref folder_order_method) = request.folder_order_method {
+            if folder_order_method == "(Empty)" {
+                tracing::debug!("  ➕ Adding folder_order_method filter: (Empty) - searching for NULL or empty");
+                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND (f.folder_order_method IS NULL OR f.folder_order_method = ''))".to_string());
             } else {
-                where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) = 0");
+                tracing::debug!("  ➕ Adding folder_order_method filter: {}", folder_order_method);
+                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.folder_order_method = ?)".to_string());
+                params_vec.push(Box::new(folder_order_method.clone()));
             }
         }
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_variables,
-            "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) >= ?", ">=", "min_variables", false);
+    }
+    
+    fn apply_critical_filter(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        if let Some(critical) = request.critical {
+            tracing::debug!("  ➕ Adding critical filter: {}", critical);
+            where_clauses.push("j.critical = ?".to_string());
+            params_vec.push(Box::new(if critical { 1 } else { 0 }));
+        }
+    }
+    
+    fn apply_dependency_filters(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        // In conditions (dependencies)
+        self.add_count_filter_owned(where_clauses, params_vec, request.min_dependencies,
+            "(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) >= ?", ">=", "min_dependencies", false);
+        self.add_count_filter_owned(where_clauses, params_vec, request.max_dependencies,
+            "(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) <= ?", "<=", "max_dependencies", false);
         
+        // ON conditions
+        self.add_count_filter_owned(where_clauses, params_vec, request.min_on_conditions,
+            "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) >= ?", ">=", "min_on_conditions", true);
+        self.add_count_filter_owned(where_clauses, params_vec, request.max_on_conditions,
+            "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) <= ?", "<=", "max_on_conditions", true);
+    }
+    
+    fn apply_odate_filter(
+        &self,
+        where_clauses: &mut Vec<String>,
+        request: &JobSearchRequest
+    ) {
+        if let Some(has_odate) = request.has_odate {
+            tracing::debug!("  ➕ Adding has_odate filter: {}", has_odate);
+            let clause = if has_odate {
+                "(EXISTS (SELECT 1 FROM in_conditions ic WHERE ic.job_id = j.id AND ic.odate IS NOT NULL AND ic.odate != '') OR EXISTS (SELECT 1 FROM out_conditions oc WHERE oc.job_id = j.id AND oc.odate IS NOT NULL AND oc.odate != ''))".to_string()
+            } else {
+                "(NOT EXISTS (SELECT 1 FROM in_conditions ic WHERE ic.job_id = j.id AND ic.odate IS NOT NULL AND ic.odate != '') AND NOT EXISTS (SELECT 1 FROM out_conditions oc WHERE oc.job_id = j.id AND oc.odate IS NOT NULL AND oc.odate != ''))".to_string()
+            };
+            where_clauses.push(clause);
+        }
+    }
+    
+    fn apply_variable_filters(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        // Has variables boolean filter
+        if let Some(has_vars) = request.has_variables {
+            tracing::debug!("  ➕ Adding has_variables filter: {}", has_vars);
+            let clause = if has_vars {
+                "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) > 0".to_string()
+            } else {
+                "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) = 0".to_string()
+            };
+            where_clauses.push(clause);
+        }
+        
+        // Minimum variables count
+        self.add_count_filter_owned(where_clauses, params_vec, request.min_variables,
+            "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) >= ?", ">=", "min_variables", false);
+    }
+    
+    fn format_where_clause(
+        &self,
+        where_clauses: Vec<String>,
+        params_vec: Vec<Box<dyn rusqlite::ToSql>>
+    ) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
         let where_clause = if where_clauses.is_empty() {
             tracing::info!("🔨 [WHERE] No filters applied - returning all jobs");
             String::new()
@@ -146,6 +189,48 @@ impl JobRepository {
         };
         
         (where_clause, params_vec)
+    }
+    
+    fn add_string_filter_owned(
+        &self,
+        clauses: &mut Vec<String>,
+        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        value: &Option<String>,
+        column: &str,
+        operator: &str,
+        filter_name: &str,
+    ) {
+        if let Some(ref val) = value {
+            tracing::debug!("  ➕ Adding {} filter: {}", filter_name, val);
+            if operator == "LIKE" {
+                clauses.push(column.to_string());
+                params.push(Box::new(format!("%{}%", val)));
+            } else {
+                clauses.push(column.to_string());
+                params.push(Box::new(val.clone()));
+            }
+        }
+    }
+    
+    fn add_count_filter_owned(
+        &self,
+        clauses: &mut Vec<String>,
+        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        value: Option<i32>,
+        table: &str,
+        operator: &str,
+        filter_name: &str,
+        use_info_log: bool,
+    ) {
+        if let Some(val) = value {
+            if use_info_log {
+                tracing::info!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
+            } else {
+                tracing::debug!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
+            }
+            clauses.push(table.to_string());
+            params.push(Box::new(val));
+        }
     }
     
     fn get_sort_params(&self, request: &JobSearchRequest) -> (String, String) {
@@ -195,16 +280,40 @@ impl JobRepository {
         let query = format!(
             r#"
             SELECT 
-                j.id, j.job_name, j.folder_name, j.application, j.sub_application,
+                j.id, j.job_name, j.folder_name,
+                f.datacenter, f.folder_order_method,
+                j.application, j.sub_application,
                 COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
                 j.task_type, j.cyclic, j.node_id, j.cmdline,
+                j.jobisn, j.job_group, j.memname, j.author,
+                j.doclib, j.docmem, j.memlib, j.overlib, j.override_path,
+                j.job_interval, j.confirm, j.retro, j.autoarch, j.rerunmem, j.category,
+                j.pdsname, j.minimum, j.preventnct2, j.option_field, j.from_field, j.par,
+                j.sysdb, j.due_out, j.reten_days, j.reten_gen, j.task_class, j.prev_day,
+                j.adjust_cond, j.jobs_in_group, j.large_size, j.ind_cyclic,
+                j.maxwait, j.maxrerun, j.maxdays, j.maxruns,
+                j.shift, j.shiftnum,
+                j.days, j.weekdays, j.jan, j.feb, j.mar, j.apr, j.may, j.jun,
+                j.jul, j.aug, j.sep, j.oct, j.nov, j.dec, j.date, j.days_and_or,
+                j.cyclic_interval_sequence, j.cyclic_times_sequence, j.cyclic_tolerance, j.cyclic_type,
+                j.created_by, j.creation_date, j.creation_user, j.creation_time,
+                j.change_userid, j.change_date, j.change_time,
+                j.job_version, j.version_opcode, j.is_current_version, j.version_serial, j.version_host,
+                j.rule_based_calendar_relationship, j.tag_relationship, j.timezone,
+                j.appl_form, j.cm_ver, j.multy_agent, j.active_from, j.active_till,
+                j.scheduling_environment, j.system_affinity, j.request_nje_node,
+                j.stat_cal, j.instream_jcl, j.use_instream_jcl,
+                j.due_out_daysoffset, j.from_daysoffset, j.to_daysoffset,
+                j.parent_folder, j.parent_table, j.end_folder, j.odate,
+                j.fprocs, j.tpgms, j.tprocs,
                 (SELECT COUNT(*) FROM in_conditions WHERE job_id = j.id) as in_cond_count,
                 (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id) as out_cond_count,
                 (SELECT COUNT(*) FROM on_conditions WHERE job_id = j.id) as on_cond_count,
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id) as ctrl_res_count,
                 (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) as var_count
             FROM jobs j
+            LEFT JOIN folders f ON j.folder_name = f.folder_name
             {}
             ORDER BY {} {}
             LIMIT ? OFFSET ?
@@ -227,31 +336,126 @@ impl JobRepository {
     }
     
     fn map_row_to_job_detail(row: &rusqlite::Row) -> rusqlite::Result<JobDetail> {
-        let appl_type: String = row.get(5)?;
-        let appl_ver: String = row.get(6)?;
+        let appl_type: String = row.get(7)?;
+        let appl_ver: String = row.get(8)?;
         
         Ok(JobDetail {
             id: row.get(0)?,
             job_name: row.get(1)?,
             folder_name: row.get(2)?,
-            application: row.get(3)?,
-            sub_application: row.get(4)?,
+            datacenter: row.get(3)?,
+            folder_order_method: row.get(4)?,
+            application: row.get(5)?,
+            sub_application: row.get(6)?,
             appl_type: if appl_type.is_empty() { None } else { Some(appl_type) },
             appl_ver: if appl_ver.is_empty() { None } else { Some(appl_ver) },
-            description: row.get(7)?,
-            owner: row.get(8)?,
-            run_as: row.get(9)?,
-            priority: row.get(10)?,
-            critical: row.get::<_, i32>(11)? == 1,
-            task_type: row.get(12)?,
-            cyclic: row.get::<_, i32>(13)? == 1,
-            node_id: row.get(14)?,
-            cmdline: row.get(15)?,
-            in_conditions_count: row.get(16)?,
-            out_conditions_count: row.get(17)?,
-            on_conditions_count: row.get(18)?,
-            control_resources_count: row.get(19)?,
-            variables_count: row.get(20)?,
+            description: row.get(9)?,
+            owner: row.get(10)?,
+            run_as: row.get(11)?,
+            priority: row.get(12)?,
+            critical: row.get::<_, i32>(13)? == 1,
+            task_type: row.get(14)?,
+            cyclic: row.get::<_, i32>(15)? == 1,
+            node_id: row.get(16)?,
+            cmdline: row.get(17)?,
+            jobisn: row.get(18)?,
+            group: row.get(19)?,
+            memname: row.get(20)?,
+            author: row.get(21)?,
+            doclib: row.get(22)?,
+            docmem: row.get(23)?,
+            memlib: row.get(24)?,
+            overlib: row.get(25)?,
+            override_path: row.get(26)?,
+            interval: row.get(27)?,
+            confirm: row.get(28)?,
+            retro: row.get(29)?,
+            autoarch: row.get(30)?,
+            rerunmem: row.get(31)?,
+            category: row.get(32)?,
+            pdsname: row.get(33)?,
+            minimum: row.get(34)?,
+            preventnct2: row.get(35)?,
+            option_field: row.get(36)?,
+            from_field: row.get(37)?,
+            par: row.get(38)?,
+            sysdb: row.get(39)?,
+            due_out: row.get(40)?,
+            reten_days: row.get(41)?,
+            reten_gen: row.get(42)?,
+            task_class: row.get(43)?,
+            prev_day: row.get(44)?,
+            adjust_cond: row.get(45)?,
+            jobs_in_group: row.get(46)?,
+            large_size: row.get(47)?,
+            ind_cyclic: row.get(48)?,
+            maxwait: row.get(49)?,
+            maxrerun: row.get(50)?,
+            maxdays: row.get(51)?,
+            maxruns: row.get(52)?,
+            shift: row.get(53)?,
+            shiftnum: row.get(54)?,
+            days: row.get(55)?,
+            weekdays: row.get(56)?,
+            jan: row.get(57)?,
+            feb: row.get(58)?,
+            mar: row.get(59)?,
+            apr: row.get(60)?,
+            may: row.get(61)?,
+            jun: row.get(62)?,
+            jul: row.get(63)?,
+            aug: row.get(64)?,
+            sep: row.get(65)?,
+            oct: row.get(66)?,
+            nov: row.get(67)?,
+            dec: row.get(68)?,
+            date: row.get(69)?,
+            days_and_or: row.get(70)?,
+            cyclic_interval_sequence: row.get(71)?,
+            cyclic_times_sequence: row.get(72)?,
+            cyclic_tolerance: row.get(73)?,
+            cyclic_type: row.get(74)?,
+            created_by: row.get(75)?,
+            creation_date: row.get(76)?,
+            creation_user: row.get(77)?,
+            creation_time: row.get(78)?,
+            change_userid: row.get(79)?,
+            change_date: row.get(80)?,
+            change_time: row.get(81)?,
+            job_version: row.get(82)?,
+            version_opcode: row.get(83)?,
+            is_current_version: row.get(84)?,
+            version_serial: row.get(85)?,
+            version_host: row.get(86)?,
+            rule_based_calendar_relationship: row.get(87)?,
+            tag_relationship: row.get(88)?,
+            timezone: row.get(89)?,
+            appl_form: row.get(90)?,
+            cm_ver: row.get(91)?,
+            multy_agent: row.get(92)?,
+            active_from: row.get(93)?,
+            active_till: row.get(94)?,
+            scheduling_environment: row.get(95)?,
+            system_affinity: row.get(96)?,
+            request_nje_node: row.get(97)?,
+            stat_cal: row.get(98)?,
+            instream_jcl: row.get(99)?,
+            use_instream_jcl: row.get(100)?,
+            due_out_daysoffset: row.get(101)?,
+            from_daysoffset: row.get(102)?,
+            to_daysoffset: row.get(103)?,
+            parent_folder: row.get(104)?,
+            parent_table: row.get(105)?,
+            end_folder: row.get(106)?,
+            odate: row.get(107)?,
+            fprocs: row.get(108)?,
+            tpgms: row.get(109)?,
+            tprocs: row.get(110)?,
+            in_conditions_count: row.get(111)?,
+            out_conditions_count: row.get(112)?,
+            on_conditions_count: row.get(113)?,
+            control_resources_count: row.get(114)?,
+            variables_count: row.get(115)?,
         })
     }
 
@@ -261,46 +465,44 @@ impl JobRepository {
         let job: Option<JobDetail> = conn.query_row(
             r#"
             SELECT 
-                j.id, j.job_name, j.folder_name, j.application, j.sub_application,
+                j.id, j.job_name, j.folder_name,
+                f.datacenter, f.folder_order_method,
+                j.application, j.sub_application,
                 COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
                 j.task_type, j.cyclic, j.node_id, j.cmdline,
+                j.jobisn, j.job_group, j.memname, j.author,
+                j.doclib, j.docmem, j.memlib, j.overlib, j.override_path,
+                j.job_interval, j.confirm, j.retro, j.autoarch, j.rerunmem, j.category,
+                j.pdsname, j.minimum, j.preventnct2, j.option_field, j.from_field, j.par,
+                j.sysdb, j.due_out, j.reten_days, j.reten_gen, j.task_class, j.prev_day,
+                j.adjust_cond, j.jobs_in_group, j.large_size, j.ind_cyclic,
+                j.maxwait, j.maxrerun, j.maxdays, j.maxruns,
+                j.shift, j.shiftnum,
+                j.days, j.weekdays, j.jan, j.feb, j.mar, j.apr, j.may, j.jun,
+                j.jul, j.aug, j.sep, j.oct, j.nov, j.dec, j.date, j.days_and_or,
+                j.cyclic_interval_sequence, j.cyclic_times_sequence, j.cyclic_tolerance, j.cyclic_type,
+                j.created_by, j.creation_date, j.creation_user, j.creation_time,
+                j.change_userid, j.change_date, j.change_time,
+                j.job_version, j.version_opcode, j.is_current_version, j.version_serial, j.version_host,
+                j.rule_based_calendar_relationship, j.tag_relationship, j.timezone,
+                j.appl_form, j.cm_ver, j.multy_agent, j.active_from, j.active_till,
+                j.scheduling_environment, j.system_affinity, j.request_nje_node,
+                j.stat_cal, j.instream_jcl, j.use_instream_jcl,
+                j.due_out_daysoffset, j.from_daysoffset, j.to_daysoffset,
+                j.parent_folder, j.parent_table, j.end_folder, j.odate,
+                j.fprocs, j.tpgms, j.tprocs,
                 (SELECT COUNT(*) FROM in_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM on_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id)
             FROM jobs j
+            LEFT JOIN folders f ON j.folder_name = f.folder_name
             WHERE j.id = ?
             "#,
             params![job_id],
-            |row| {
-                let appl_type: String = row.get(5)?;
-                let appl_ver: String = row.get(6)?;
-                Ok(JobDetail {
-                    id: row.get(0)?,
-                    job_name: row.get(1)?,
-                    folder_name: row.get(2)?,
-                    application: row.get(3)?,
-                    sub_application: row.get(4)?,
-                    appl_type: if appl_type.is_empty() { None } else { Some(appl_type) },
-                    appl_ver: if appl_ver.is_empty() { None } else { Some(appl_ver) },
-                    description: row.get(7)?,
-                    owner: row.get(8)?,
-                    run_as: row.get(9)?,
-                    priority: row.get(10)?,
-                    critical: row.get::<_, i32>(11)? == 1,
-                    task_type: row.get(12)?,
-                    cyclic: row.get::<_, i32>(13)? == 1,
-                    node_id: row.get(14)?,
-                    cmdline: row.get(15)?,
-                    in_conditions_count: row.get(16)?,
-                    out_conditions_count: row.get(17)?,
-                    on_conditions_count: row.get(18)?,
-                    control_resources_count: row.get(19)?,
-                    variables_count: row.get(20)?,
-                })
-            },
+            Self::map_row_to_job_detail,
         ).optional()?;
         
         if let Some(job) = job {
@@ -558,12 +760,37 @@ impl JobRepository {
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
+        let datacenters: Vec<String> = conn.prepare(
+            "SELECT DISTINCT datacenter FROM folders WHERE datacenter IS NOT NULL AND datacenter != '' ORDER BY datacenter"
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        let mut folder_order_methods: Vec<String> = conn.prepare(
+            "SELECT DISTINCT folder_order_method FROM folders WHERE folder_order_method IS NOT NULL AND folder_order_method != '' ORDER BY folder_order_method"
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        // Add special "(Empty)" option for folders without folder_order_method
+        let empty_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM folders WHERE folder_order_method IS NULL OR folder_order_method = ''",
+            [],
+            |row| row.get(0)
+        )?;
+        
+        if empty_count > 0 {
+            folder_order_methods.insert(0, "(Empty)".to_string());
+        }
+        
         Ok(FilterOptions {
             folders,
             applications,
             appl_types: appl_type_options,
             appl_vers: appl_ver_options,
             task_types,
+            datacenters,
+            folder_order_methods,
         })
     }
     
@@ -890,5 +1117,235 @@ impl JobRepository {
             nodes,
             edges,
         })
+    }
+
+    pub fn get_end_to_end_graph(&self, job_id: i64, max_depth: Option<i32>) -> Result<super::models::JobGraphData> {
+        let depth_limit = max_depth.unwrap_or(5).min(10); // Default 5, max 10
+        tracing::info!("📊 [E2E-GRAPH] Fetching end-to-end dependency graph for job_id={}, depth={}", job_id, depth_limit);
+        
+        let conn = self.conn.lock().unwrap();
+        
+        // Get the main job info
+        let job = conn.query_row(
+            "SELECT id, job_name, folder_name, application, description FROM jobs WHERE id = ?",
+            [job_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?
+                ))
+            }
+        )?;
+        
+        tracing::info!("✅ [E2E-GRAPH] Found job: id={}, name='{}', folder='{}'", job.0, job.1, job.2);
+        
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        let mut visited_jobs = std::collections::HashSet::new();
+        let mut job_levels = std::collections::HashMap::new();
+        
+        // Add current job as node with level 0
+        nodes.push(super::models::GraphNode {
+            id: job.0,
+            label: job.1.clone(),
+            folder: job.2.clone(),
+            application: job.3.clone(),
+            description: job.4.clone(),
+            color: "#4CAF50".to_string(), // Green for current job
+            is_current: true,
+        });
+        visited_jobs.insert(job.0);
+        job_levels.insert(job.0, 0);
+        
+        // Traverse upstream (dependencies this job needs)
+        tracing::info!("🔼 [E2E-GRAPH] Traversing upstream dependencies...");
+        self.traverse_upstream(&conn, job.0, &job.1, 1, depth_limit, &mut nodes, &mut edges, &mut visited_jobs, &mut job_levels)?;
+        
+        // Traverse downstream (jobs that depend on this job)
+        tracing::info!("🔽 [E2E-GRAPH] Traversing downstream dependencies...");
+        self.traverse_downstream(&conn, job.0, &job.1, 1, depth_limit, &mut nodes, &mut edges, &mut visited_jobs, &mut job_levels)?;
+        
+        tracing::info!("✅ [E2E-GRAPH] Graph complete: {} nodes, {} edges, max depth reached: {}", 
+                      nodes.len(), edges.len(), job_levels.values().max().unwrap_or(&0));
+        
+        Ok(super::models::JobGraphData {
+            job_id: job.0,
+            job_name: job.1,
+            folder_name: job.2,
+            nodes,
+            edges,
+        })
+    }
+    
+    fn traverse_upstream(
+        &self,
+        conn: &rusqlite::Connection,
+        current_job_id: i64,
+        _current_job_name: &str,
+        current_level: i32,
+        max_depth: i32,
+        nodes: &mut Vec<super::models::GraphNode>,
+        edges: &mut Vec<super::models::GraphEdge>,
+        visited: &mut std::collections::HashSet<i64>,
+        levels: &mut std::collections::HashMap<i64, i32>,
+    ) -> Result<()> {
+        if current_level > max_depth {
+            tracing::debug!("[E2E-GRAPH] Reached max depth {} for upstream traversal", max_depth);
+            return Ok(());
+        }
+        
+        tracing::debug!("[E2E-GRAPH] Upstream level {}: Processing job_id={}", current_level, current_job_id);
+        
+        // Get in_conditions for current job
+        let in_query = "SELECT DISTINCT condition_name FROM in_conditions WHERE job_id = ?";
+        let mut in_stmt = conn.prepare(in_query)?;
+        let condition_names: Vec<String> = in_stmt
+            .query_map([current_job_id], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        tracing::debug!("[E2E-GRAPH] Found {} conditions for job_id={}", condition_names.len(), current_job_id);
+        
+        for cond_name in condition_names {
+            let base_name = cond_name
+                .trim_end_matches("-ENDED-OK")
+                .trim_end_matches("-ENDED-NOTOK")
+                .trim_end_matches("-ENDED")
+                .trim_end_matches("-OK")
+                .trim_end_matches("-NOTOK");
+            
+            if let Ok(dep_job) = conn.query_row(
+                "SELECT id, job_name, folder_name, application, description FROM jobs WHERE job_name = ? OR job_name = ? LIMIT 1",
+                [&cond_name, base_name],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?
+                    ))
+                }
+            ) {
+                if !visited.contains(&dep_job.0) {
+                    // Color based on level (upstream = blue shades)
+                    let color = match current_level {
+                        1 => "#2196F3".to_string(), // Blue
+                        2 => "#1976D2".to_string(), // Darker blue
+                        3 => "#1565C0".to_string(), // Even darker
+                        _ => "#0D47A1".to_string(), // Darkest blue
+                    };
+                    
+                    nodes.push(super::models::GraphNode {
+                        id: dep_job.0,
+                        label: dep_job.1.clone(),
+                        folder: dep_job.2.clone(),
+                        application: dep_job.3.clone(),
+                        description: dep_job.4.clone(),
+                        color,
+                        is_current: false,
+                    });
+                    visited.insert(dep_job.0);
+                    levels.insert(dep_job.0, -current_level); // Negative for upstream
+                    
+                    tracing::debug!("[E2E-GRAPH] Added upstream node at level {}: {}", current_level, dep_job.1);
+                    
+                    // Recursively traverse this job's dependencies
+                    self.traverse_upstream(conn, dep_job.0, &dep_job.1, current_level + 1, max_depth, nodes, edges, visited, levels)?;
+                }
+                
+                edges.push(super::models::GraphEdge {
+                    from: dep_job.0,
+                    to: current_job_id,
+                    edge_type: "in".to_string(),
+                });
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn traverse_downstream(
+        &self,
+        conn: &rusqlite::Connection,
+        current_job_id: i64,
+        current_job_name: &str,
+        current_level: i32,
+        max_depth: i32,
+        nodes: &mut Vec<super::models::GraphNode>,
+        edges: &mut Vec<super::models::GraphEdge>,
+        visited: &mut std::collections::HashSet<i64>,
+        levels: &mut std::collections::HashMap<i64, i32>,
+    ) -> Result<()> {
+        if current_level > max_depth {
+            tracing::debug!("[E2E-GRAPH] Reached max depth {} for downstream traversal", max_depth);
+            return Ok(());
+        }
+        
+        tracing::debug!("[E2E-GRAPH] Downstream level {}: Processing job_id={}", current_level, current_job_id);
+        
+        // Find jobs that depend on current job
+        let out_query = "SELECT DISTINCT job_id FROM in_conditions WHERE condition_name = ?";
+        let mut out_stmt = conn.prepare(out_query)?;
+        let dependent_job_ids: Vec<i64> = out_stmt
+            .query_map([current_job_name], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        tracing::debug!("[E2E-GRAPH] Found {} dependent jobs for '{}'", dependent_job_ids.len(), current_job_name);
+        
+        for dep_job_id in dependent_job_ids {
+            if let Ok(dep_job) = conn.query_row(
+                "SELECT id, job_name, folder_name, application, description FROM jobs WHERE id = ?",
+                [dep_job_id],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?
+                    ))
+                }
+            ) {
+                if !visited.contains(&dep_job.0) {
+                    // Color based on level (downstream = orange shades)
+                    let color = match current_level {
+                        1 => "#FF9800".to_string(), // Orange
+                        2 => "#F57C00".to_string(), // Darker orange
+                        3 => "#E65100".to_string(), // Even darker
+                        _ => "#BF360C".to_string(), // Darkest orange
+                    };
+                    
+                    nodes.push(super::models::GraphNode {
+                        id: dep_job.0,
+                        label: dep_job.1.clone(),
+                        folder: dep_job.2.clone(),
+                        application: dep_job.3.clone(),
+                        description: dep_job.4.clone(),
+                        color,
+                        is_current: false,
+                    });
+                    visited.insert(dep_job.0);
+                    levels.insert(dep_job.0, current_level); // Positive for downstream
+                    
+                    tracing::debug!("[E2E-GRAPH] Added downstream node at level {}: {}", current_level, dep_job.1);
+                    
+                    // Recursively traverse jobs that depend on this job
+                    self.traverse_downstream(conn, dep_job.0, &dep_job.1, current_level + 1, max_depth, nodes, edges, visited, levels)?;
+                }
+                
+                edges.push(super::models::GraphEdge {
+                    from: current_job_id,
+                    to: dep_job.0,
+                    edge_type: "out".to_string(),
+                });
+            }
+        }
+        
+        Ok(())
     }
 }

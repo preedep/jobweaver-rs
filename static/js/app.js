@@ -624,6 +624,8 @@ async function loadFilterOptions() {
             console.log(`  - APPL_TYPE: ${options.appl_types.length}`);
             console.log(`  - APPL_VER: ${options.appl_vers.length}`);
             console.log(`  - Task Types: ${options.task_types.length}`);
+            console.log(`  - Datacenters: ${options.datacenters.length}`);
+            console.log(`  - Folder Order Methods: ${options.folder_order_methods.length}`);
             
             console.log('🎨 [FILTERS] Populating dropdowns...');
             populateSelect('filter-folder', options.folders);
@@ -631,6 +633,8 @@ async function loadFilterOptions() {
             populateSelect('filter-appl-type', options.appl_types);
             populateSelect('filter-appl-ver', options.appl_vers);
             populateSelect('filter-task-type', options.task_types);
+            populateSelect('filter-datacenter', options.datacenters);
+            populateSelect('filter-folder-order-method', options.folder_order_methods);
             
             console.log('🔍 [FILTERS] Initializing Select2...');
             initializeSelect2();
@@ -681,13 +685,16 @@ function collectFilterValues() {
         applType: $('#filter-appl-type').val(),
         applVer: $('#filter-appl-ver').val(),
         taskType: $('#filter-task-type').val(),
+        datacenter: $('#filter-datacenter').val(),
+        folderOrderMethod: $('#filter-folder-order-method').val(),
         critical: document.getElementById('filter-critical')?.value,
         minDeps: document.getElementById('filter-min-deps')?.value?.trim(),
         maxDeps: document.getElementById('filter-max-deps')?.value?.trim(),
         minOnConds: document.getElementById('filter-min-on-conds')?.value?.trim(),
         maxOnConds: document.getElementById('filter-max-on-conds')?.value?.trim(),
         hasVars: document.getElementById('filter-has-variables')?.value,
-        minVars: document.getElementById('filter-min-variables')?.value?.trim()
+        minVars: document.getElementById('filter-min-variables')?.value?.trim(),
+        hasOdate: document.getElementById('filter-has-odate')?.value
     };
 }
 
@@ -707,6 +714,8 @@ function buildFiltersObject(values) {
     if (values.applType) filters.appl_type = values.applType;
     if (values.applVer) filters.appl_ver = values.applVer;
     if (values.taskType) filters.task_type = values.taskType;
+    if (values.datacenter) filters.datacenter = values.datacenter;
+    if (values.folderOrderMethod) filters.folder_order_method = values.folderOrderMethod;
     if (values.critical && values.critical !== '') filters.critical = values.critical === 'true';
     if (values.minDeps) filters.min_dependencies = parseInt(values.minDeps);
     if (values.maxDeps) filters.max_dependencies = parseInt(values.maxDeps);
@@ -714,6 +723,7 @@ function buildFiltersObject(values) {
     if (values.maxOnConds) filters.max_on_conditions = parseInt(values.maxOnConds);
     if (values.hasVars && values.hasVars !== '') filters.has_variables = values.hasVars === 'true';
     if (values.minVars) filters.min_variables = parseInt(values.minVars);
+    if (values.hasOdate && values.hasOdate !== '') filters.has_odate = values.hasOdate === 'true';
     
     return filters;
 }
@@ -859,7 +869,7 @@ function renderJobsTable(data) {
     }
     
     if (data.jobs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="15" class="text-center">No jobs found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="17" class="text-center">No jobs found</td></tr>';
         updateResultsInfo({ jobs: [], total: 0 });
         return;
     }
@@ -909,18 +919,30 @@ function renderJobRow(job) {
     const criticalBadge = job.critical 
         ? '<span class="badge badge-danger">Yes</span>' 
         : '<span class="badge badge-success">No</span>';
+    const cyclicBadge = job.cyclic 
+        ? '<span class="badge badge-warning">Yes</span>' 
+        : '<span class="badge badge-secondary">No</span>';
     
     return `
         <tr>
             <td><strong>${escapeHtml(job.job_name)}</strong></td>
             <td><span title="${escapeHtml(job.folder_name)}">${escapeHtml(job.folder_name)}</span></td>
+            <td>${escapeHtml(job.datacenter || '-')}</td>
+            <td>${escapeHtml(job.folder_order_method || '-')}</td>
             <td>${escapeHtml(job.application || '-')}</td>
             <td>${escapeHtml(job.sub_application || '-')}</td>
             <td>${escapeHtml(job.appl_type || '-')}</td>
             <td>${escapeHtml(job.appl_ver || '-')}</td>
             <td>${escapeHtml(job.task_type || '-')}</td>
             <td>${criticalBadge}</td>
+            <td>${cyclicBadge}</td>
+            <td><span title="${escapeHtml(job.node_id || '')}">${escapeHtml(job.node_id || '-')}</span></td>
+            <td>${escapeHtml(job.group || '-')}</td>
+            <td>${escapeHtml(job.memname || '-')}</td>
             <td>${escapeHtml(job.owner || '-')}</td>
+            <td>${job.maxwait !== null && job.maxwait !== undefined ? job.maxwait : '-'}</td>
+            <td>${job.maxrerun !== null && job.maxrerun !== undefined ? job.maxrerun : '-'}</td>
+            <td>${escapeHtml(job.shift || '-')}</td>
             <td><span class="badge badge-info">${job.control_resources_count || 0}</span></td>
             <td><span class="badge badge-info">${job.variables_count || 0}</span></td>
             <td><span class="badge badge-success">${job.in_conditions_count || 0}</span></td>
@@ -1008,10 +1030,19 @@ function goToPage(page) {
  */
 async function viewJobDetail(jobId) {
     const modal = document.getElementById('job-detail-modal');
-    const modalBody = document.getElementById('modal-job-details');
     
     modal.classList.add('active');
-    modalBody.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    
+    // Reset to first tab
+    if (typeof switchTab === 'function') {
+        switchTab('basic');
+    }
+    
+    // Show loading in basic tab
+    const basicTab = document.getElementById('tab-basic');
+    if (basicTab) {
+        basicTab.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    }
     
     try {
         const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
@@ -1023,31 +1054,45 @@ async function viewJobDetail(jobId) {
         const result = await response.json();
         
         if (result.success) {
-            renderJobDetail(result.data);
-        } else {
-            modalBody.innerHTML = '<p class="text-center text-muted">Failed to load job details</p>';
+            const job = result.data;
+            
+            // Update modal header
+            document.getElementById('modal-job-name').textContent = job.job.job_name;
+            const subtitle = document.getElementById('modal-job-subtitle');
+            if (subtitle) {
+                subtitle.textContent = `${job.job.folder_name} • ${job.job.application || 'N/A'}`;
+            }
+            
+            // Populate all tabs using functions from modal-enhanced.js
+            if (typeof populateBasicTab === 'function') populateBasicTab(job);
+            if (typeof populateSchedulingTab === 'function') populateSchedulingTab(job);
+            if (typeof populateLimitsTab === 'function') populateLimitsTab(job);
+            if (typeof populateDependenciesTab === 'function') populateDependenciesTab(job);
+            if (typeof populateVariablesTab === 'function') populateVariablesTab(job);
+            if (typeof populateMetadataTab === 'function') populateMetadataTab(job);
         }
     } catch (error) {
-        console.error('Failed to load job detail:', error);
-        modalBody.innerHTML = '<p class="text-center text-muted">Failed to load job details</p>';
+        console.error('Error loading job details:', error);
+        const basicTab = document.getElementById('tab-basic');
+        if (basicTab) {
+            basicTab.innerHTML = '<div class="error">Failed to load job details</div>';
+        }
     }
 }
 
 /**
- * Renders job detail information in the modal
+ * Populates the basic tab with job information
  * 
- * @param {Object} data - Job detail data from API
- * @param {Object} data.job - Job object
- * @param {Array} data.in_conditions - Input conditions
- * @param {Array} data.out_conditions - Output conditions
- * @param {Array} data.variables - Job variables
+ * @param {Object} job - Job data object
  */
-function renderJobDetail(data) {
-    const job = data.job;
-    const modalName = document.getElementById('modal-job-name');
-    const modalBody = document.getElementById('modal-job-details');
-    
-    modalName.textContent = job.job_name;
+function populateBasicTab(job) {
+    const basicTab = document.getElementById('tab-basic');
+    const jobName = job.job.job_name;
+    const folderName = job.job.folder_name;
+    const application = job.job.application || '-';
+    const taskType = job.job.task_type || '-';
+    const owner = job.job.owner || '-';
+    const critical = job.job.critical ? 'Yes' : 'No';
     
     let html = `
         <div class="detail-section">
@@ -1055,84 +1100,51 @@ function renderJobDetail(data) {
             <div class="detail-grid">
                 <div class="detail-item">
                     <div class="detail-label">Job Name</div>
-                    <div class="detail-value">${escapeHtml(job.job_name)}</div>
+                    <div class="detail-value">${escapeHtml(jobName)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Folder</div>
-                    <div class="detail-value">${escapeHtml(job.folder_name)}</div>
+                    <div class="detail-value">${escapeHtml(folderName)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Application</div>
-                    <div class="detail-value">${escapeHtml(job.application || '-')}</div>
+                    <div class="detail-value">${escapeHtml(application)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Task Type</div>
-                    <div class="detail-value">${escapeHtml(job.task_type || '-')}</div>
+                    <div class="detail-value">${escapeHtml(taskType)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Owner</div>
-                    <div class="detail-value">${escapeHtml(job.owner || '-')}</div>
+                    <div class="detail-value">${escapeHtml(owner)}</div>
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Critical</div>
-                    <div class="detail-value">${job.critical ? 'Yes' : 'No'}</div>
+                    <div class="detail-value">${critical}</div>
                 </div>
             </div>
         </div>
     `;
     
-    if (job.description) {
+    if (job.job.description) {
         html += `
             <div class="detail-section">
                 <h3>Description</h3>
-                <p>${escapeHtml(job.description)}</p>
+                <p>${escapeHtml(job.job.description)}</p>
             </div>
         `;
     }
     
-    if (job.cmdline) {
+    if (job.job.cmdline) {
         html += `
             <div class="detail-section">
                 <h3>Command Line</h3>
-                <pre style="background: #f3f4f6; padding: 12px; border-radius: 6px; overflow-x: auto;">${escapeHtml(job.cmdline)}</pre>
+                <pre style="background: #f3f4f6; padding: 12px; border-radius: 6px; overflow-x: auto;">${escapeHtml(job.job.cmdline)}</pre>
             </div>
         `;
     }
     
-    if (data.in_conditions && data.in_conditions.length > 0) {
-        html += `
-            <div class="detail-section">
-                <h3>In Conditions (${data.in_conditions.length})</h3>
-                <ul class="detail-list">
-                    ${data.in_conditions.map(c => `<li>${escapeHtml(c.condition_name)}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    if (data.out_conditions && data.out_conditions.length > 0) {
-        html += `
-            <div class="detail-section">
-                <h3>Out Conditions (${data.out_conditions.length})</h3>
-                <ul class="detail-list">
-                    ${data.out_conditions.map(c => `<li>${escapeHtml(c.condition_name)}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    if (data.variables && data.variables.length > 0) {
-        html += `
-            <div class="detail-section">
-                <h3>Variables (${data.variables.length})</h3>
-                <ul class="detail-list">
-                    ${data.variables.map(v => `<li><strong>${escapeHtml(v.name)}:</strong> ${escapeHtml(v.value)}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    modalBody.innerHTML = html;
+    basicTab.innerHTML = html;
 }
 
 // ============================================================================
@@ -1237,7 +1249,12 @@ async function exportToCSV() {
     console.log('📥 [EXPORT] Starting CSV export...');
     showLoading(true);
     console.log("[SEARCH] Starting search...");
-    document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Exporting to CSV...';
+    
+    // Update loading text if element exists
+    const loadingText = document.querySelector('#loading-overlay .loading-text');
+    if (loadingText) {
+        loadingText.textContent = 'Exporting to CSV...';
+    }
     
     const jobName = document.getElementById('filter-job-name').value;
     const folder = $('#filter-folder').val();
@@ -1258,16 +1275,17 @@ async function exportToCSV() {
     
     console.log('📋 [EXPORT] Filters:', filters);
     
-    const params = new URLSearchParams(filters);
-    
     try {
         console.log('🌐 [EXPORT] Sending export request...');
         const fetchStart = performance.now();
         
-        const response = await fetch(`${API_BASE}/jobs/export/csv?${params}`, {
+        const response = await fetch(`${API_BASE}/jobs/export`, {
+            method: 'POST',
             headers: {
+                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
-            }
+            },
+            body: JSON.stringify(filters)
         });
         
         const fetchEnd = performance.now();
@@ -1298,7 +1316,13 @@ async function exportToCSV() {
         alert('Failed to export CSV');
     } finally {
         showLoading(false);
-        document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Searching jobs...';
+        
+        // Reset loading text if element exists
+        const loadingText = document.querySelector('#loading-overlay .loading-text');
+        if (loadingText) {
+            loadingText.textContent = 'Searching jobs...';
+        }
+        
         const endTime = performance.now();
         console.log(`🏁 [EXPORT] Total export time: ${(endTime - startTime).toFixed(2)}ms`);
         console.log('─────────────────────────────────────');
@@ -1307,16 +1331,40 @@ async function exportToCSV() {
 
 // Job Dependency Graph
 let currentNetwork = null;
+let currentGraphJobId = null;
+let currentGraphMode = 'direct'; // 'direct' or 'e2e'
 
 async function showJobGraph(jobId) {
+    currentGraphJobId = jobId;
+    currentGraphMode = 'direct';
+    
+    // Reset UI
+    document.getElementById('btn-direct-graph').classList.add('active');
+    document.getElementById('btn-e2e-graph').classList.remove('active');
+    document.getElementById('depth-selector').style.display = 'none';
+    
     const modal = document.getElementById('graph-modal');
     const graphContainer = document.getElementById('graph-container');
     
     modal.classList.add('active');
     graphContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading graph...</div></div>';
     
+    await loadGraph(jobId, 'direct');
+}
+
+async function loadGraph(jobId, mode, depth = null) {
+    const graphContainer = document.getElementById('graph-container');
+    
     try {
-        const response = await fetch(`${API_BASE}/jobs/${jobId}/graph`, {
+        let url = `${API_BASE}/jobs/${jobId}/graph`;
+        if (mode === 'e2e') {
+            url = `${API_BASE}/jobs/${jobId}/graph/end-to-end`;
+            if (depth) {
+                url += `?depth=${depth}`;
+            }
+        }
+        
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -1329,7 +1377,7 @@ async function showJobGraph(jobId) {
         const result = await response.json();
         
         if (result.success && result.data) {
-            renderJobGraph(result.data);
+            renderJobGraph(result.data, mode);
         } else {
             graphContainer.innerHTML = '<div style="padding: 40px; text-align: center;"><p class="error">Failed to load graph data</p></div>';
         }
@@ -1339,7 +1387,35 @@ async function showJobGraph(jobId) {
     }
 }
 
-function renderJobGraph(graphData) {
+function toggleGraphMode(mode) {
+    currentGraphMode = mode;
+    
+    // Update button states
+    if (mode === 'direct') {
+        document.getElementById('btn-direct-graph').classList.add('active');
+        document.getElementById('btn-e2e-graph').classList.remove('active');
+        document.getElementById('depth-selector').style.display = 'none';
+    } else {
+        document.getElementById('btn-direct-graph').classList.remove('active');
+        document.getElementById('btn-e2e-graph').classList.add('active');
+        document.getElementById('depth-selector').style.display = 'flex';
+    }
+    
+    // Reload graph with new mode
+    reloadGraph();
+}
+
+function reloadGraph() {
+    if (!currentGraphJobId) return;
+    
+    const graphContainer = document.getElementById('graph-container');
+    graphContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading graph...</div></div>';
+    
+    const depth = currentGraphMode === 'e2e' ? parseInt(document.getElementById('graph-depth').value) : null;
+    loadGraph(currentGraphJobId, currentGraphMode, depth);
+}
+
+function renderJobGraph(graphData, mode = 'direct') {
     const graphContainer = document.getElementById('graph-container');
     
     // Update header info
@@ -1417,7 +1493,34 @@ function renderJobGraph(graphData) {
     
     const data = { nodes, edges };
     
-    const options = {
+    // Use hierarchical layout for end-to-end mode
+    const options = mode === 'e2e' ? {
+        layout: {
+            hierarchical: {
+                enabled: true,
+                direction: 'LR', // Left to Right
+                sortMethod: 'directed',
+                levelSeparation: 200,
+                nodeSpacing: 150,
+                treeSpacing: 200
+            }
+        },
+        physics: {
+            enabled: false // Disable physics for hierarchical layout
+        },
+        edges: {
+            smooth: {
+                type: 'cubicBezier',
+                forceDirection: 'horizontal',
+                roundness: 0.4
+            }
+        },
+        interaction: {
+            dragNodes: true,
+            dragView: true,
+            zoomView: true
+        }
+    } : {
         layout: {
             randomSeed: 42,
             improvedLayout: true
@@ -1554,6 +1657,8 @@ window.closeGraphModal = closeGraphModal;
 window.closeJobDetailModal = closeJobDetailModal;
 window.fitGraphToScreen = fitGraphToScreen;
 window.zoomIn = zoomIn;
+window.toggleGraphMode = toggleGraphMode;
+window.reloadGraph = reloadGraph;
 window.zoomOut = zoomOut;
 window.resetGraph = resetGraph;
 

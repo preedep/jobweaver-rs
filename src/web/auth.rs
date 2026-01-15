@@ -8,8 +8,10 @@ use actix_web::error::ErrorUnauthorized;
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use chrono::{Duration, Utc};
+use chrono::{Duration, Utc, DateTime};
 use bcrypt::{hash, verify, DEFAULT_COST};
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 use crate::web::models::{AuthType, UserInfo};
 
@@ -160,36 +162,166 @@ pub async fn validator(
     }
 }
 
+/// Login attempt tracking information
+#[derive(Debug, Clone)]
+struct LoginAttempt {
+    /// Number of failed attempts
+    attempts: u32,
+    /// Timestamp when the account was locked (if locked)
+    locked_until: Option<DateTime<Utc>>,
+}
+
+/// Login attempt tracker for rate limiting
+///
+/// Tracks failed login attempts per username and enforces lockout periods.
+pub struct LoginAttemptTracker {
+    /// Map of username to login attempt info
+    attempts: Mutex<HashMap<String, LoginAttempt>>,
+    /// Maximum allowed failed attempts before lockout
+    max_attempts: u32,
+    /// Lockout duration in minutes
+    lockout_duration_minutes: u64,
+}
+
+impl LoginAttemptTracker {
+    /// Creates a new LoginAttemptTracker
+    ///
+    /// # Arguments
+    ///
+    /// * `max_attempts` - Maximum failed attempts before lockout
+    /// * `lockout_duration_minutes` - Duration of lockout in minutes
+    pub fn new(max_attempts: u32, lockout_duration_minutes: u64) -> Self {
+        Self {
+            attempts: Mutex::new(HashMap::new()),
+            max_attempts,
+            lockout_duration_minutes,
+        }
+    }
+
+    /// Checks if a username is currently locked out
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - Username to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if locked out, `false` otherwise
+    pub fn is_locked_out(&self, username: &str) -> bool {
+        let mut attempts = self.attempts.lock().unwrap();
+        
+        if let Some(attempt) = attempts.get(username) {
+            if let Some(locked_until) = attempt.locked_until {
+                if Utc::now() < locked_until {
+                    return true;
+                } else {
+                    // Lockout period expired, reset attempts
+                    attempts.remove(username);
+                    return false;
+                }
+            }
+        }
+        false
+    }
+
+    /// Records a failed login attempt
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - Username that failed to login
+    ///
+    /// # Returns
+    ///
+    /// Number of remaining attempts before lockout (0 if locked out)
+    pub fn record_failed_attempt(&self, username: &str) -> u32 {
+        let mut attempts = self.attempts.lock().unwrap();
+        
+        let attempt = attempts.entry(username.to_string()).or_insert(LoginAttempt {
+            attempts: 0,
+            locked_until: None,
+        });
+        
+        attempt.attempts += 1;
+        
+        if attempt.attempts >= self.max_attempts {
+            // Lock the account
+            let lockout_until = Utc::now() + Duration::minutes(self.lockout_duration_minutes as i64);
+            attempt.locked_until = Some(lockout_until);
+            return 0;
+        }
+        
+        self.max_attempts - attempt.attempts
+    }
+
+    /// Resets login attempts for a username (called on successful login)
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - Username to reset attempts for
+    pub fn reset_attempts(&self, username: &str) {
+        let mut attempts = self.attempts.lock().unwrap();
+        attempts.remove(username);
+    }
+
+    /// Gets the remaining time until lockout expires
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - Username to check
+    ///
+    /// # Returns
+    ///
+    /// Remaining minutes until unlock, or None if not locked
+    pub fn get_lockout_remaining_minutes(&self, username: &str) -> Option<i64> {
+        let attempts = self.attempts.lock().unwrap();
+        
+        if let Some(attempt) = attempts.get(username) {
+            if let Some(locked_until) = attempt.locked_until {
+                let now = Utc::now();
+                if now < locked_until {
+                    let remaining = locked_until.signed_duration_since(now);
+                    return Some(remaining.num_minutes() + 1); // Round up
+                }
+            }
+        }
+        None
+    }
+}
+
 /// In-memory user store for local authentication
 ///
-/// Stores username to password hash mappings. In production, this should
-/// be replaced with a proper database backend.
+/// Validates credentials against configuration from .env file.
 #[derive(Debug)]
 pub struct UserStore {
-    /// Map of username to bcrypt password hash
-    users: std::collections::HashMap<String, String>,
+    /// Configured username from .env
+    username: String,
+    /// Configured password hash from .env
+    password_hash: String,
 }
 
 impl UserStore {
-    /// Creates a new UserStore with a default admin user
+    /// Creates a new UserStore with credentials from configuration
     ///
-    /// Default credentials: username="admin", password="admin"
+    /// # Arguments
+    ///
+    /// * `username` - Configured username from .env
+    /// * `password` - Configured password from .env (will be hashed)
     ///
     /// # Returns
     ///
     /// A new UserStore instance
-    pub fn new() -> Self {
-        let mut users = std::collections::HashMap::new();
-        
+    pub fn new(username: String, password: String) -> Self {
         let auth_service = AuthService::new("temp-secret".to_string());
-        if let Ok(hashed) = auth_service.hash_password("admin") {
-            users.insert("admin".to_string(), hashed);
-        }
+        let password_hash = auth_service.hash_password(&password)
+            .expect("Failed to hash password");
         
-        Self { users }
+        Self { 
+            username,
+            password_hash,
+        }
     }
 
-    /// Verifies user credentials
+    /// Verifies user credentials against configured username and password
     ///
     /// # Arguments
     ///
@@ -200,27 +332,12 @@ impl UserStore {
     ///
     /// `true` if credentials are valid, `false` otherwise
     pub fn verify_user(&self, username: &str, password: &str) -> bool {
-        if let Some(hash) = self.users.get(username) {
-            let auth_service = AuthService::new("temp-secret".to_string());
-            auth_service.verify_password(password, hash).unwrap_or(false)
-        } else {
-            false
+        if username != self.username {
+            return false;
         }
-    }
-
-    /// Adds a new user to the store
-    ///
-    /// # Arguments
-    ///
-    /// * `username` - Username for the new user
-    /// * `password_hash` - Bcrypt hash of the user's password
-    pub fn add_user(&mut self, username: String, password_hash: String) {
-        self.users.insert(username, password_hash);
+        
+        let auth_service = AuthService::new("temp-secret".to_string());
+        auth_service.verify_password(password, &self.password_hash).unwrap_or(false)
     }
 }
 
-impl Default for UserStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}

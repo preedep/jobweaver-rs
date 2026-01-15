@@ -39,6 +39,41 @@ pub struct Folder {
     pub description: Option<String>,
     /// Owner of the folder
     pub owner: Option<String>,
+    
+    // Additional folder metadata from Control-M XML
+    /// Control-M version
+    pub version: Option<String>,
+    /// Platform (OS/System)
+    pub platform: Option<String>,
+    /// Table name (for table folders)
+    pub table_name: Option<String>,
+    /// Folder dataset name
+    pub folder_dsn: Option<String>,
+    /// Table dataset name
+    pub table_dsn: Option<String>,
+    /// Modified flag
+    pub modified: Option<bool>,
+    /// Last upload timestamp
+    pub last_upload: Option<String>,
+    /// Folder order method (how jobs are ordered)
+    pub folder_order_method: Option<String>,
+    /// Table user daily setting
+    pub table_userdaily: Option<String>,
+    /// Real folder ID in Control-M system
+    pub real_folder_id: Option<i32>,
+    /// Real table ID in Control-M system
+    pub real_tableid: Option<i32>,
+    /// Folder type code (numeric)
+    pub type_code: Option<i32>,
+    /// Used by (user/system)
+    pub used_by: Option<String>,
+    /// Used by code
+    pub used_by_code: Option<i32>,
+    /// Enforce validation flag
+    pub enforce_validation: Option<String>,
+    /// Site standard name
+    pub site_standard_name: Option<String>,
+    
     /// Jobs directly contained in this folder
     pub jobs: Vec<Job>,
     /// Sub-folders contained in this folder
@@ -64,6 +99,22 @@ impl Folder {
             application: None,
             description: None,
             owner: None,
+            version: None,
+            platform: None,
+            table_name: None,
+            folder_dsn: None,
+            table_dsn: None,
+            modified: None,
+            last_upload: None,
+            folder_order_method: None,
+            table_userdaily: None,
+            real_folder_id: None,
+            real_tableid: None,
+            type_code: None,
+            used_by: None,
+            used_by_code: None,
+            enforce_validation: None,
+            site_standard_name: None,
             jobs: Vec::new(),
             sub_folders: Vec::new(),
         }

@@ -1,3 +1,8 @@
+//! CLI Commands module
+//!
+//! This module provides command implementations for the CLI interface,
+//! including job analysis, report generation, and summary printing.
+
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
@@ -9,9 +14,21 @@ use crate::infrastructure::output::{JsonGenerator, CsvGenerator, HtmlGenerator, 
 use crate::application::use_cases::AnalyzeJobs;
 use crate::presentation::dto::AnalysisOutput;
 
+/// Command for analyzing Control-M jobs and generating reports
+///
+/// Provides functionality to parse Control-M XML files, analyze jobs,
+/// and generate various output formats (JSON, CSV, HTML, Markdown, SQLite).
 pub struct AnalyzeCommand;
 
 impl AnalyzeCommand {
+    /// Prints a comprehensive analysis summary to the console
+    ///
+    /// Displays overall statistics, difficulty distribution, migration waves,
+    /// top complex jobs, critical jobs, quick wins, and recommendations.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output containing all job metrics
     fn print_summary(output: &AnalysisOutput) {
         println!("\n{}", "=".repeat(80));
         println!("📊 CONTROL-M MIGRATION ANALYSIS SUMMARY");
@@ -33,6 +50,13 @@ impl AnalyzeCommand {
         println!("\n{}", "=".repeat(80));
     }
 
+    /// Prints overall statistics section
+    ///
+    /// Displays total jobs, folders, average complexity, and circular dependency warnings.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output data
     fn print_overall_statistics(output: &AnalysisOutput) {
         println!("\n📈 Overall Statistics:");
         println!("  • Total Jobs:              {}", output.summary.total_jobs);
@@ -45,6 +69,16 @@ impl AnalyzeCommand {
         }
     }
 
+    /// Calculates percentage for display purposes
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - Numerator value
+    /// * `total` - Denominator value
+    ///
+    /// # Returns
+    ///
+    /// Percentage as f64 (0.0 if total is 0)
     fn calculate_percentage(count: usize, total: usize) -> f64 {
         if total == 0 {
             0.0
@@ -53,6 +87,14 @@ impl AnalyzeCommand {
         }
     }
 
+    /// Prints migration difficulty distribution
+    ///
+    /// Shows breakdown of jobs by difficulty level (Easy, Medium, Hard)
+    /// with counts and percentages.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output data
     fn print_difficulty_distribution(output: &AnalysisOutput) {
         let easy_count = output.jobs.iter()
             .filter(|j| j.migration_difficulty == "Easy")
@@ -75,6 +117,16 @@ impl AnalyzeCommand {
             hard_count, Self::calculate_percentage(hard_count, total));
     }
 
+    /// Calculates average complexity for a specific migration wave
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output data
+    /// * `wave_number` - Wave number to calculate average for
+    ///
+    /// # Returns
+    ///
+    /// Average complexity score for the wave (0.0 if no jobs)
     fn calculate_wave_average_complexity(output: &AnalysisOutput, wave_number: usize) -> f64 {
         let wave_jobs: Vec<_> = output.jobs.iter()
             .filter(|j| j.migration_wave == wave_number)
@@ -89,6 +141,13 @@ impl AnalyzeCommand {
         }
     }
 
+    /// Prints migration waves breakdown
+    ///
+    /// Shows each wave with job count and average complexity.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output data
     fn print_migration_waves(output: &AnalysisOutput) {
         println!("\n🌊 Migration Waves Breakdown:");
         for wave in &output.migration_waves {
@@ -98,6 +157,13 @@ impl AnalyzeCommand {
         }
     }
 
+    /// Prints top 10 most complex jobs
+    ///
+    /// Lists jobs sorted by complexity score in descending order.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output data
     fn print_top_complex_jobs(output: &AnalysisOutput) {
         println!("\n🔥 Top 10 Most Complex Jobs:");
         let mut sorted_jobs = output.jobs.clone();
@@ -111,12 +177,28 @@ impl AnalyzeCommand {
         }
     }
 
+    /// Filters and returns critical jobs
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output data
+    ///
+    /// # Returns
+    ///
+    /// Vector of references to critical jobs
     fn get_critical_jobs(output: &AnalysisOutput) -> Vec<&crate::presentation::dto::JobOutput> {
         output.jobs.iter()
             .filter(|j| j.is_critical)
             .collect()
     }
 
+    /// Prints critical jobs section
+    ///
+    /// Shows up to 5 critical jobs with their complexity and wave assignment.
+    ///
+    /// # Arguments
+    ///
+    /// * `critical_jobs` - Slice of critical job references
     fn print_critical_jobs(critical_jobs: &[&crate::presentation::dto::JobOutput]) {
         if critical_jobs.is_empty() {
             return;
@@ -133,12 +215,30 @@ impl AnalyzeCommand {
         }
     }
 
+    /// Filters and returns quick win jobs
+    ///
+    /// Quick wins are easy jobs with no dependencies that can be migrated immediately.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output data
+    ///
+    /// # Returns
+    ///
+    /// Vector of references to quick win jobs
     fn get_quick_wins(output: &AnalysisOutput) -> Vec<&crate::presentation::dto::JobOutput> {
         output.jobs.iter()
             .filter(|j| j.migration_difficulty == "Easy" && j.dependency_count == 0)
             .collect()
     }
 
+    /// Prints quick wins section
+    ///
+    /// Shows up to 5 easy jobs with no dependencies.
+    ///
+    /// # Arguments
+    ///
+    /// * `quick_wins` - Slice of quick win job references
     fn print_quick_wins(quick_wins: &[&crate::presentation::dto::JobOutput]) {
         if quick_wins.is_empty() {
             return;
@@ -155,6 +255,15 @@ impl AnalyzeCommand {
         }
     }
 
+    /// Prints migration recommendations
+    ///
+    /// Provides actionable recommendations based on analysis results.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Analysis output data
+    /// * `critical_jobs` - Slice of critical job references
+    /// * `quick_wins` - Slice of quick win job references
     fn print_recommendations(
         output: &AnalysisOutput,
         critical_jobs: &[&crate::presentation::dto::JobOutput],
@@ -172,6 +281,31 @@ impl AnalyzeCommand {
         println!("  • {} quick wins can be migrated immediately", quick_wins.len());
     }
 
+    /// Executes the analyze command
+    ///
+    /// Parses Control-M XML file, analyzes jobs, generates reports in requested formats,
+    /// and prints a summary to the console.
+    ///
+    /// # Arguments
+    ///
+    /// * `input_path` - Path to the Control-M XML file
+    /// * `output_dir` - Directory for output files
+    /// * `generate_json` - Whether to generate JSON report
+    /// * `generate_csv` - Whether to generate CSV report
+    /// * `generate_html` - Whether to generate HTML report
+    /// * `generate_markdown` - Whether to generate Markdown report
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - XML file cannot be parsed
+    /// - Analysis fails
+    /// - Output directory cannot be created
+    /// - Report generation fails
     pub fn execute<P: AsRef<Path>>(
         input_path: P,
         output_dir: P,

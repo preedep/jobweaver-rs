@@ -1,13 +1,29 @@
+//! In-Memory Job Repository implementation
+//!
+//! This module provides an in-memory implementation of the JobRepository trait
+//! using a HashMap for storage. Suitable for testing and small-scale use cases.
+
 use std::collections::HashMap;
 use anyhow::Result;
 use crate::domain::entities::Job;
 use crate::domain::repositories::JobRepository;
 
+/// In-memory implementation of the JobRepository trait
+///
+/// Stores jobs in a HashMap with job names as keys. This implementation
+/// is fast for lookups but does not persist data between application runs.
+/// Ideal for testing, prototyping, or scenarios where persistence is not required.
 pub struct InMemoryJobRepository {
+    /// Internal storage mapping job names to Job entities
     jobs: HashMap<String, Job>,
 }
 
 impl InMemoryJobRepository {
+    /// Creates a new empty InMemoryJobRepository
+    ///
+    /// # Returns
+    ///
+    /// A new InMemoryJobRepository instance with no jobs
     pub fn new() -> Self {
         Self {
             jobs: HashMap::new(),
@@ -22,19 +38,53 @@ impl Default for InMemoryJobRepository {
 }
 
 impl JobRepository for InMemoryJobRepository {
+    /// Adds a job to the repository
+    ///
+    /// If a job with the same name already exists, it will be replaced.
+    ///
+    /// # Arguments
+    ///
+    /// * `job` - The job to add
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) on success
     fn add(&mut self, job: Job) -> Result<()> {
         self.jobs.insert(job.job_name.clone(), job);
         Ok(())
     }
 
+    /// Retrieves a job by its name
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the job to retrieve
+    ///
+    /// # Returns
+    ///
+    /// Some(&Job) if found, None otherwise
     fn get_by_name(&self, name: &str) -> Option<&Job> {
         self.jobs.get(name)
     }
 
+    /// Retrieves all jobs in the repository
+    ///
+    /// # Returns
+    ///
+    /// Vector of references to all jobs
     fn get_all(&self) -> Vec<&Job> {
         self.jobs.values().collect()
     }
 
+    /// Finds all jobs belonging to a specific folder
+    ///
+    /// # Arguments
+    ///
+    /// * `folder_name` - The name of the folder to search for
+    ///
+    /// # Returns
+    ///
+    /// Vector of references to jobs in the specified folder
     fn find_by_folder(&self, folder_name: &str) -> Vec<&Job> {
         self.jobs
             .values()
@@ -42,6 +92,11 @@ impl JobRepository for InMemoryJobRepository {
             .collect()
     }
 
+    /// Returns the total number of jobs in the repository
+    ///
+    /// # Returns
+    ///
+    /// The count of jobs
     fn count(&self) -> usize {
         self.jobs.len()
     }
@@ -51,6 +106,7 @@ impl JobRepository for InMemoryJobRepository {
 mod tests {
     use super::*;
 
+    /// Tests adding a job and retrieving it by name
     #[test]
     fn test_add_and_get_job() {
         let mut repo = InMemoryJobRepository::new();
@@ -64,6 +120,7 @@ mod tests {
         assert_eq!(retrieved.unwrap().job_name, "TEST_JOB");
     }
 
+    /// Tests finding jobs by folder name
     #[test]
     fn test_find_by_folder() {
         let mut repo = InMemoryJobRepository::new();

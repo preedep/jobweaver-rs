@@ -5,10 +5,10 @@
 
 use actix_web::{web, HttpResponse, HttpRequest, HttpMessage, Responder};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
-use std::sync::{Arc, Mutex};
-use tracing::{info, error, debug};
+use std::sync::Arc;
+use tracing::{info, error};
 
-use crate::web::auth::{AuthService, UserStore, Claims};
+use crate::web::auth::{AuthService, UserStore, Claims, LoginAttemptTracker};
 use crate::web::models::*;
 use crate::web::repository::JobRepository;
 use crate::web::config::WebConfig;
@@ -27,28 +27,52 @@ pub async fn health_check() -> HttpResponse {
 /// Handles user login with username and password
 ///
 /// Validates credentials and generates a JWT token on success.
+/// Enforces login attempt limits and account lockout.
 ///
 /// # Arguments
 ///
 /// * `request` - Login request with username and password
 /// * `config` - Web configuration containing JWT secret
 /// * `user_store` - User store for credential verification
+/// * `login_tracker` - Login attempt tracker for rate limiting
 ///
 /// # Returns
 ///
-/// HTTP 200 with token on success, HTTP 401 on invalid credentials
+/// HTTP 200 with token on success, HTTP 401 on invalid credentials, HTTP 429 on lockout
 pub async fn login(
     request: web::Json<LoginRequest>,
     config: web::Data<WebConfig>,
-    user_store: web::Data<Arc<Mutex<UserStore>>>,
+    user_store: web::Data<Arc<UserStore>>,
+    login_tracker: web::Data<Arc<LoginAttemptTracker>>,
 ) -> HttpResponse {
-    let store = user_store.lock().unwrap();
-    
-    if !store.verify_user(&request.username, &request.password) {
-        return HttpResponse::Unauthorized().json(ApiResponse::<()>::error(
-            "Invalid username or password".to_string()
+    // Check if account is locked out
+    if login_tracker.is_locked_out(&request.username) {
+        let remaining_minutes = login_tracker.get_lockout_remaining_minutes(&request.username)
+            .unwrap_or(config.lockout_duration_minutes as i64);
+        
+        return HttpResponse::TooManyRequests().json(ApiResponse::<()>::error(
+            format!("Account locked due to too many failed login attempts. Please try again in {} minutes.", remaining_minutes)
         ));
     }
+    
+    // Verify credentials
+    if !user_store.verify_user(&request.username, &request.password) {
+        // Record failed attempt
+        let remaining_attempts = login_tracker.record_failed_attempt(&request.username);
+        
+        if remaining_attempts == 0 {
+            return HttpResponse::TooManyRequests().json(ApiResponse::<()>::error(
+                format!("Account locked due to too many failed login attempts. Please try again in {} minutes.", config.lockout_duration_minutes)
+            ));
+        } else {
+            return HttpResponse::Unauthorized().json(ApiResponse::<()>::error(
+                format!("Invalid username or password. {} attempts remaining.", remaining_attempts)
+            ));
+        }
+    }
+    
+    // Successful login - reset attempts
+    login_tracker.reset_attempts(&request.username);
     
     let user = UserInfo {
         username: request.username.clone(),
@@ -156,9 +180,10 @@ pub async fn search_jobs(
 ) -> HttpResponse {
     let request = query.into_inner();
     info!("🌐 [API] POST /jobs/search");
-    info!("📋 [API] Basic filters: job_name={:?}, folder={:?}, app={:?}, appl_type={:?}, appl_ver={:?}, task_type={:?}, critical={:?}",
+    info!("📋 [API] Basic filters: job_name={:?}, folder={:?}, app={:?}, appl_type={:?}, appl_ver={:?}, task_type={:?}, critical={:?}, datacenter={:?}, folder_order_method={:?}, has_odate={:?}",
           request.job_name, request.folder_name, request.application, 
-          request.appl_type, request.appl_ver, request.task_type, request.critical);
+          request.appl_type, request.appl_ver, request.task_type, request.critical,
+          request.datacenter, request.folder_order_method, request.has_odate);
     info!("📊 [API] Dependency filters: min_deps={:?}, max_deps={:?}, min_on_conds={:?}, max_on_conds={:?}",
           request.min_dependencies, request.max_dependencies, request.min_on_conditions, request.max_on_conditions);
     info!("💾 [API] Variable filters: has_vars={:?}, min_vars={:?}",
@@ -318,6 +343,52 @@ pub async fn get_job_graph(
         },
         Err(e) => {
             error!("❌ [API] Failed to get graph for job_id={}: {}", job_id, e);
+            error!("[API] Error details: {:?}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()> {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            })
+        },
+    }
+}
+
+/// Gets end-to-end dependency graph data for a specific job
+///
+/// Returns nodes and edges for visualizing full dependency chain (upstream and downstream).
+///
+/// # Arguments
+///
+/// * `repo` - Job repository for database access
+/// * `path` - Job ID from URL path
+/// * `query` - Query parameters (depth)
+///
+/// # Returns
+///
+/// HTTP 200 with graph data on success, HTTP 500 on error
+pub async fn get_job_graph_end_to_end(
+    repo: web::Data<Arc<JobRepository>>,
+    path: web::Path<i64>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> impl Responder {
+    let job_id = path.into_inner();
+    let depth = query.get("depth")
+        .and_then(|d| d.parse::<i32>().ok());
+    
+    info!("🌐 [API] GET /jobs/{}/graph/end-to-end?depth={:?}", job_id, depth);
+    
+    match repo.get_end_to_end_graph(job_id, depth) {
+        Ok(graph_data) => {
+            info!("✅ [API] Successfully retrieved end-to-end graph for job_id={} ({} nodes, {} edges)", 
+                  job_id, graph_data.nodes.len(), graph_data.edges.len());
+            HttpResponse::Ok().json(ApiResponse {
+                success: true,
+                data: Some(graph_data),
+                error: None,
+            })
+        },
+        Err(e) => {
+            error!("❌ [API] Failed to get end-to-end graph for job_id={}: {}", job_id, e);
             error!("[API] Error details: {:?}", e);
             HttpResponse::InternalServerError().json(ApiResponse::<()> {
                 success: false,
