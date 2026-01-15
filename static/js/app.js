@@ -1249,7 +1249,12 @@ async function exportToCSV() {
     console.log('📥 [EXPORT] Starting CSV export...');
     showLoading(true);
     console.log("[SEARCH] Starting search...");
-    document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Exporting to CSV...';
+    
+    // Update loading text if element exists
+    const loadingText = document.querySelector('#loading-overlay .loading-text');
+    if (loadingText) {
+        loadingText.textContent = 'Exporting to CSV...';
+    }
     
     const jobName = document.getElementById('filter-job-name').value;
     const folder = $('#filter-folder').val();
@@ -1270,16 +1275,17 @@ async function exportToCSV() {
     
     console.log('📋 [EXPORT] Filters:', filters);
     
-    const params = new URLSearchParams(filters);
-    
     try {
         console.log('🌐 [EXPORT] Sending export request...');
         const fetchStart = performance.now();
         
-        const response = await fetch(`${API_BASE}/jobs/export/csv?${params}`, {
+        const response = await fetch(`${API_BASE}/jobs/export`, {
+            method: 'POST',
             headers: {
+                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${authToken}`
-            }
+            },
+            body: JSON.stringify(filters)
         });
         
         const fetchEnd = performance.now();
@@ -1310,7 +1316,13 @@ async function exportToCSV() {
         alert('Failed to export CSV');
     } finally {
         showLoading(false);
-        document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Searching jobs...';
+        
+        // Reset loading text if element exists
+        const loadingText = document.querySelector('#loading-overlay .loading-text');
+        if (loadingText) {
+            loadingText.textContent = 'Searching jobs...';
+        }
+        
         const endTime = performance.now();
         console.log(`🏁 [EXPORT] Total export time: ${(endTime - startTime).toFixed(2)}ms`);
         console.log('─────────────────────────────────────');
