@@ -5,10 +5,10 @@
 
 use actix_web::{web, HttpResponse, HttpRequest, HttpMessage, Responder};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
-use std::sync::{Arc, Mutex};
-use tracing::{info, error, debug};
+use std::sync::Arc;
+use tracing::{info, error};
 
-use crate::web::auth::{AuthService, UserStore, Claims};
+use crate::web::auth::{AuthService, UserStore, Claims, LoginAttemptTracker};
 use crate::web::models::*;
 use crate::web::repository::JobRepository;
 use crate::web::config::WebConfig;
@@ -27,28 +27,52 @@ pub async fn health_check() -> HttpResponse {
 /// Handles user login with username and password
 ///
 /// Validates credentials and generates a JWT token on success.
+/// Enforces login attempt limits and account lockout.
 ///
 /// # Arguments
 ///
 /// * `request` - Login request with username and password
 /// * `config` - Web configuration containing JWT secret
 /// * `user_store` - User store for credential verification
+/// * `login_tracker` - Login attempt tracker for rate limiting
 ///
 /// # Returns
 ///
-/// HTTP 200 with token on success, HTTP 401 on invalid credentials
+/// HTTP 200 with token on success, HTTP 401 on invalid credentials, HTTP 429 on lockout
 pub async fn login(
     request: web::Json<LoginRequest>,
     config: web::Data<WebConfig>,
-    user_store: web::Data<Arc<Mutex<UserStore>>>,
+    user_store: web::Data<Arc<UserStore>>,
+    login_tracker: web::Data<Arc<LoginAttemptTracker>>,
 ) -> HttpResponse {
-    let store = user_store.lock().unwrap();
-    
-    if !store.verify_user(&request.username, &request.password) {
-        return HttpResponse::Unauthorized().json(ApiResponse::<()>::error(
-            "Invalid username or password".to_string()
+    // Check if account is locked out
+    if login_tracker.is_locked_out(&request.username) {
+        let remaining_minutes = login_tracker.get_lockout_remaining_minutes(&request.username)
+            .unwrap_or(config.lockout_duration_minutes as i64);
+        
+        return HttpResponse::TooManyRequests().json(ApiResponse::<()>::error(
+            format!("Account locked due to too many failed login attempts. Please try again in {} minutes.", remaining_minutes)
         ));
     }
+    
+    // Verify credentials
+    if !user_store.verify_user(&request.username, &request.password) {
+        // Record failed attempt
+        let remaining_attempts = login_tracker.record_failed_attempt(&request.username);
+        
+        if remaining_attempts == 0 {
+            return HttpResponse::TooManyRequests().json(ApiResponse::<()>::error(
+                format!("Account locked due to too many failed login attempts. Please try again in {} minutes.", config.lockout_duration_minutes)
+            ));
+        } else {
+            return HttpResponse::Unauthorized().json(ApiResponse::<()>::error(
+                format!("Invalid username or password. {} attempts remaining.", remaining_attempts)
+            ));
+        }
+    }
+    
+    // Successful login - reset attempts
+    login_tracker.reset_attempts(&request.username);
     
     let user = UserInfo {
         username: request.username.clone(),

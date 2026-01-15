@@ -7,7 +7,7 @@ use actix_web::{web, App, HttpServer, middleware};
 use actix_cors::Cors;
 use actix_files as fs;
 use actix_web_httpauth::middleware::HttpAuthentication;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tracing::info;
 
 use crate::web::{handlers, auth, config::WebConfig, repository::JobRepository};
@@ -17,12 +17,14 @@ use crate::web::{handlers, auth, config::WebConfig, repository::JobRepository};
 /// Configures and runs an Actix-Web server with:
 /// - CORS support for cross-origin requests
 /// - JWT authentication middleware
+/// - Login attempt tracking and rate limiting
+/// - Environment-based authentication (.env credentials)
 /// - API routes for job management and authentication
 /// - Static file serving for the web UI
 ///
 /// # Arguments
 ///
-/// * `config` - Web server configuration
+/// * `config` - Web server configuration (loaded from .env or defaults)
 ///
 /// # Returns
 ///
@@ -32,16 +34,35 @@ pub async fn start_web_server(config: WebConfig) -> std::io::Result<()> {
     info!("Database: {}", config.database_path);
     
     // Initialize shared application state
+    
+    // Database repository for job data
     let repository = Arc::new(
         JobRepository::new(&config.database_path)
             .expect("Failed to open database")
     );
     
-    let user_store = Arc::new(Mutex::new(auth::UserStore::new()));
+    // User store with credentials from .env configuration
+    // Validates login attempts against AUTH_USERNAME and AUTH_PASSWORD
+    let user_store = Arc::new(
+        auth::UserStore::new(
+            config.auth_username.clone(),
+            config.auth_password.clone()
+        )
+    );
+    
+    // Login attempt tracker for rate limiting and account lockout
+    // Configured with MAX_LOGIN_ATTEMPTS and LOCKOUT_DURATION_MINUTES from .env
+    let login_tracker = Arc::new(
+        auth::LoginAttemptTracker::new(
+            config.max_login_attempts,
+            config.lockout_duration_minutes
+        )
+    );
     
     let config_data = web::Data::new(config.clone());
     let repository_data = web::Data::new(repository);
     let user_store_data = web::Data::new(user_store);
+    let login_tracker_data = web::Data::new(login_tracker);
     
     let server = HttpServer::new(move || {
         // Configure CORS to allow requests from any origin
@@ -60,9 +81,10 @@ pub async fn start_web_server(config: WebConfig) -> std::io::Result<()> {
             // Add CORS middleware
             .wrap(cors)
             // Inject shared application state
-            .app_data(config_data.clone())
-            .app_data(repository_data.clone())
-            .app_data(user_store_data.clone())
+            .app_data(config_data.clone())           // Server configuration
+            .app_data(repository_data.clone())       // Job database repository
+            .app_data(user_store_data.clone())       // User authentication store
+            .app_data(login_tracker_data.clone())    // Login attempt tracker
             // API routes
             .service(
                 web::scope("/api")
