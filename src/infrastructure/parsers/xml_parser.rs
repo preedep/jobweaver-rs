@@ -447,7 +447,10 @@ impl ControlMXmlParser {
     /// * `job` - Mutable reference to Job to add condition to
     fn parse_in_condition(&self, node: &roxmltree::Node, job: &mut Job) {
         if let Some(name) = node.attribute("NAME") {
-            job.in_conditions.push(Condition::new_in(name.to_string()));
+            let mut condition = Condition::new_in(name.to_string());
+            condition.odate = node.attribute("ODATE").map(|s| s.to_string());
+            condition.and_or = node.attribute("AND_OR").map(|s| s.to_string());
+            job.in_conditions.push(condition);
         }
     }
     
@@ -459,7 +462,11 @@ impl ControlMXmlParser {
     /// * `job` - Mutable reference to Job to add condition to
     fn parse_out_condition(&self, node: &roxmltree::Node, job: &mut Job) {
         if let Some(name) = node.attribute("NAME") {
-            job.out_conditions.push(Condition::new_out(name.to_string()));
+            let mut condition = Condition::new_out(name.to_string());
+            condition.odate = node.attribute("ODATE").map(|s| s.to_string());
+            // Note: SIGN attribute is stored in and_or field for out conditions
+            condition.and_or = node.attribute("SIGN").map(|s| s.to_string());
+            job.out_conditions.push(condition);
         }
     }
     

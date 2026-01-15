@@ -50,118 +50,135 @@ impl JobRepository {
         })
     }
     
-    fn add_string_filter(
-        &self,
-        clauses: &mut Vec<&'static str>,
-        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
-        value: &Option<String>,
-        column: &'static str,
-        operator: &str,
-        filter_name: &str,
-    ) {
-        if let Some(ref val) = value {
-            tracing::debug!("  ➕ Adding {} filter: {}", filter_name, val);
-            if operator == "LIKE" {
-                clauses.push(column);
-                params.push(Box::new(format!("%{}%", val)));
-            } else {
-                clauses.push(column);
-                params.push(Box::new(val.clone()));
-            }
-        }
-    }
-
-    fn add_count_filter(
-        &self,
-        clauses: &mut Vec<&'static str>,
-        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
-        value: Option<i32>,
-        table: &'static str,
-        operator: &str,
-        filter_name: &str,
-        use_info_log: bool,
-    ) {
-        if let Some(val) = value {
-            if use_info_log {
-                tracing::info!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
-            } else {
-                tracing::debug!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
-            }
-            clauses.push(table);
-            params.push(Box::new(val));
-        }
-    }
 
     fn build_where_clause(&self, request: &JobSearchRequest) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
         tracing::debug!("🔨 [WHERE] Building WHERE clause for search");
         let mut where_clauses = Vec::new();
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         
-        // Basic string filters
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.job_name, "j.job_name LIKE ?", "LIKE", "job_name");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.folder_name, "j.folder_name LIKE ?", "LIKE", "folder_name");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.application, "j.application = ?", "=", "application");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.task_type, "j.task_type = ?", "=", "task_type");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.appl_type, "j.appl_type = ?", "=", "appl_type");
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.appl_ver, "j.appl_ver = ?", "=", "appl_ver");
+        // Apply all filter categories
+        self.apply_basic_filters(&mut where_clauses, &mut params_vec, request);
+        self.apply_folder_filters(&mut where_clauses, &mut params_vec, request);
+        self.apply_critical_filter(&mut where_clauses, &mut params_vec, request);
+        self.apply_dependency_filters(&mut where_clauses, &mut params_vec, request);
+        self.apply_odate_filter(&mut where_clauses, request);
+        self.apply_variable_filters(&mut where_clauses, &mut params_vec, request);
         
-        // Folder-level filters (join with folders table)
-        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.datacenter, 
+        self.format_where_clause(where_clauses, params_vec)
+    }
+    
+    fn apply_basic_filters(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        self.add_string_filter_owned(where_clauses, params_vec, &request.job_name, "j.job_name LIKE ?", "LIKE", "job_name");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.folder_name, "j.folder_name LIKE ?", "LIKE", "folder_name");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.application, "j.application = ?", "=", "application");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.task_type, "j.task_type = ?", "=", "task_type");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.appl_type, "j.appl_type = ?", "=", "appl_type");
+        self.add_string_filter_owned(where_clauses, params_vec, &request.appl_ver, "j.appl_ver = ?", "=", "appl_ver");
+    }
+    
+    fn apply_folder_filters(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        // Datacenter filter
+        self.add_string_filter_owned(where_clauses, params_vec, &request.datacenter, 
             "EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = ?)", "=", "datacenter");
         
-        // Special handling for folder_order_method - support "(Empty)" for NULL/empty values
+        // Folder order method with special "(Empty)" handling
         if let Some(ref folder_order_method) = request.folder_order_method {
             if folder_order_method == "(Empty)" {
                 tracing::debug!("  ➕ Adding folder_order_method filter: (Empty) - searching for NULL or empty");
-                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND (f.folder_order_method IS NULL OR f.folder_order_method = ''))");
+                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND (f.folder_order_method IS NULL OR f.folder_order_method = ''))".to_string());
             } else {
                 tracing::debug!("  ➕ Adding folder_order_method filter: {}", folder_order_method);
-                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.folder_order_method = ?)");
+                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.folder_order_method = ?)".to_string());
                 params_vec.push(Box::new(folder_order_method.clone()));
             }
         }
-        
-        // Critical filter
+    }
+    
+    fn apply_critical_filter(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
         if let Some(critical) = request.critical {
             tracing::debug!("  ➕ Adding critical filter: {}", critical);
-            where_clauses.push("j.critical = ?");
+            where_clauses.push("j.critical = ?".to_string());
             params_vec.push(Box::new(if critical { 1 } else { 0 }));
         }
-        
-        // Dependency count filters
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_dependencies,
+    }
+    
+    fn apply_dependency_filters(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        // In conditions (dependencies)
+        self.add_count_filter_owned(where_clauses, params_vec, request.min_dependencies,
             "(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) >= ?", ">=", "min_dependencies", false);
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.max_dependencies,
+        self.add_count_filter_owned(where_clauses, params_vec, request.max_dependencies,
             "(SELECT COUNT(*) FROM in_conditions WHERE in_conditions.job_id = j.id) <= ?", "<=", "max_dependencies", false);
         
-        // ON conditions count filters (use info log)
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_on_conditions,
+        // ON conditions
+        self.add_count_filter_owned(where_clauses, params_vec, request.min_on_conditions,
             "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) >= ?", ">=", "min_on_conditions", true);
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.max_on_conditions,
+        self.add_count_filter_owned(where_clauses, params_vec, request.max_on_conditions,
             "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) <= ?", "<=", "max_on_conditions", true);
-        
-        // ODATE filter
+    }
+    
+    fn apply_odate_filter(
+        &self,
+        where_clauses: &mut Vec<String>,
+        request: &JobSearchRequest
+    ) {
         if let Some(has_odate) = request.has_odate {
             tracing::debug!("  ➕ Adding has_odate filter: {}", has_odate);
-            if has_odate {
-                where_clauses.push("(j.odate IS NOT NULL AND j.odate != '')");
+            let clause = if has_odate {
+                "(EXISTS (SELECT 1 FROM in_conditions ic WHERE ic.job_id = j.id AND ic.odate IS NOT NULL AND ic.odate != '') OR EXISTS (SELECT 1 FROM out_conditions oc WHERE oc.job_id = j.id AND oc.odate IS NOT NULL AND oc.odate != ''))".to_string()
             } else {
-                where_clauses.push("(j.odate IS NULL OR j.odate = '')");
-            }
+                "(NOT EXISTS (SELECT 1 FROM in_conditions ic WHERE ic.job_id = j.id AND ic.odate IS NOT NULL AND ic.odate != '') AND NOT EXISTS (SELECT 1 FROM out_conditions oc WHERE oc.job_id = j.id AND oc.odate IS NOT NULL AND oc.odate != ''))".to_string()
+            };
+            where_clauses.push(clause);
         }
-        
-        // Variable filters
+    }
+    
+    fn apply_variable_filters(
+        &self,
+        where_clauses: &mut Vec<String>,
+        params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        request: &JobSearchRequest
+    ) {
+        // Has variables boolean filter
         if let Some(has_vars) = request.has_variables {
             tracing::debug!("  ➕ Adding has_variables filter: {}", has_vars);
-            if has_vars {
-                where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) > 0");
+            let clause = if has_vars {
+                "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) > 0".to_string()
             } else {
-                where_clauses.push("(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) = 0");
-            }
+                "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) = 0".to_string()
+            };
+            where_clauses.push(clause);
         }
-        self.add_count_filter(&mut where_clauses, &mut params_vec, request.min_variables,
-            "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) >= ?", ">=", "min_variables", false);
         
+        // Minimum variables count
+        self.add_count_filter_owned(where_clauses, params_vec, request.min_variables,
+            "(SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) >= ?", ">=", "min_variables", false);
+    }
+    
+    fn format_where_clause(
+        &self,
+        where_clauses: Vec<String>,
+        params_vec: Vec<Box<dyn rusqlite::ToSql>>
+    ) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
         let where_clause = if where_clauses.is_empty() {
             tracing::info!("🔨 [WHERE] No filters applied - returning all jobs");
             String::new()
@@ -172,6 +189,48 @@ impl JobRepository {
         };
         
         (where_clause, params_vec)
+    }
+    
+    fn add_string_filter_owned(
+        &self,
+        clauses: &mut Vec<String>,
+        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        value: &Option<String>,
+        column: &str,
+        operator: &str,
+        filter_name: &str,
+    ) {
+        if let Some(ref val) = value {
+            tracing::debug!("  ➕ Adding {} filter: {}", filter_name, val);
+            if operator == "LIKE" {
+                clauses.push(column.to_string());
+                params.push(Box::new(format!("%{}%", val)));
+            } else {
+                clauses.push(column.to_string());
+                params.push(Box::new(val.clone()));
+            }
+        }
+    }
+    
+    fn add_count_filter_owned(
+        &self,
+        clauses: &mut Vec<String>,
+        params: &mut Vec<Box<dyn rusqlite::ToSql>>,
+        value: Option<i32>,
+        table: &str,
+        operator: &str,
+        filter_name: &str,
+        use_info_log: bool,
+    ) {
+        if let Some(val) = value {
+            if use_info_log {
+                tracing::info!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
+            } else {
+                tracing::debug!("  ➕ Adding {} filter: {} {}", filter_name, operator, val);
+            }
+            clauses.push(table.to_string());
+            params.push(Box::new(val));
+        }
     }
     
     fn get_sort_params(&self, request: &JobSearchRequest) -> (String, String) {
