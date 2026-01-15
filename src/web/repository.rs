@@ -105,6 +105,22 @@ impl JobRepository {
         self.add_string_filter(&mut where_clauses, &mut params_vec, &request.appl_type, "j.appl_type = ?", "=", "appl_type");
         self.add_string_filter(&mut where_clauses, &mut params_vec, &request.appl_ver, "j.appl_ver = ?", "=", "appl_ver");
         
+        // Folder-level filters (join with folders table)
+        self.add_string_filter(&mut where_clauses, &mut params_vec, &request.datacenter, 
+            "EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = ?)", "=", "datacenter");
+        
+        // Special handling for folder_order_method - support "(Empty)" for NULL/empty values
+        if let Some(ref folder_order_method) = request.folder_order_method {
+            if folder_order_method == "(Empty)" {
+                tracing::debug!("  ➕ Adding folder_order_method filter: (Empty) - searching for NULL or empty");
+                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND (f.folder_order_method IS NULL OR f.folder_order_method = ''))");
+            } else {
+                tracing::debug!("  ➕ Adding folder_order_method filter: {}", folder_order_method);
+                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.folder_order_method = ?)");
+                params_vec.push(Box::new(folder_order_method.clone()));
+            }
+        }
+        
         // Critical filter
         if let Some(critical) = request.critical {
             tracing::debug!("  ➕ Adding critical filter: {}", critical);
@@ -195,7 +211,9 @@ impl JobRepository {
         let query = format!(
             r#"
             SELECT 
-                j.id, j.job_name, j.folder_name, j.application, j.sub_application,
+                j.id, j.job_name, j.folder_name,
+                f.datacenter, f.folder_order_method,
+                j.application, j.sub_application,
                 COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
                 j.task_type, j.cyclic, j.node_id, j.cmdline,
@@ -205,6 +223,7 @@ impl JobRepository {
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id) as ctrl_res_count,
                 (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) as var_count
             FROM jobs j
+            LEFT JOIN folders f ON j.folder_name = f.folder_name
             {}
             ORDER BY {} {}
             LIMIT ? OFFSET ?
@@ -227,31 +246,33 @@ impl JobRepository {
     }
     
     fn map_row_to_job_detail(row: &rusqlite::Row) -> rusqlite::Result<JobDetail> {
-        let appl_type: String = row.get(5)?;
-        let appl_ver: String = row.get(6)?;
+        let appl_type: String = row.get(7)?;
+        let appl_ver: String = row.get(8)?;
         
         Ok(JobDetail {
             id: row.get(0)?,
             job_name: row.get(1)?,
             folder_name: row.get(2)?,
-            application: row.get(3)?,
-            sub_application: row.get(4)?,
+            datacenter: row.get(3)?,
+            folder_order_method: row.get(4)?,
+            application: row.get(5)?,
+            sub_application: row.get(6)?,
             appl_type: if appl_type.is_empty() { None } else { Some(appl_type) },
             appl_ver: if appl_ver.is_empty() { None } else { Some(appl_ver) },
-            description: row.get(7)?,
-            owner: row.get(8)?,
-            run_as: row.get(9)?,
-            priority: row.get(10)?,
-            critical: row.get::<_, i32>(11)? == 1,
-            task_type: row.get(12)?,
-            cyclic: row.get::<_, i32>(13)? == 1,
-            node_id: row.get(14)?,
-            cmdline: row.get(15)?,
-            in_conditions_count: row.get(16)?,
-            out_conditions_count: row.get(17)?,
-            on_conditions_count: row.get(18)?,
-            control_resources_count: row.get(19)?,
-            variables_count: row.get(20)?,
+            description: row.get(9)?,
+            owner: row.get(10)?,
+            run_as: row.get(11)?,
+            priority: row.get(12)?,
+            critical: row.get::<_, i32>(13)? == 1,
+            task_type: row.get(14)?,
+            cyclic: row.get::<_, i32>(15)? == 1,
+            node_id: row.get(16)?,
+            cmdline: row.get(17)?,
+            in_conditions_count: row.get(18)?,
+            out_conditions_count: row.get(19)?,
+            on_conditions_count: row.get(20)?,
+            control_resources_count: row.get(21)?,
+            variables_count: row.get(22)?,
         })
     }
 
@@ -261,7 +282,9 @@ impl JobRepository {
         let job: Option<JobDetail> = conn.query_row(
             r#"
             SELECT 
-                j.id, j.job_name, j.folder_name, j.application, j.sub_application,
+                j.id, j.job_name, j.folder_name,
+                f.datacenter, f.folder_order_method,
+                j.application, j.sub_application,
                 COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
                 j.task_type, j.cyclic, j.node_id, j.cmdline,
@@ -271,34 +294,37 @@ impl JobRepository {
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id)
             FROM jobs j
+            LEFT JOIN folders f ON j.folder_name = f.folder_name
             WHERE j.id = ?
             "#,
             params![job_id],
             |row| {
-                let appl_type: String = row.get(5)?;
-                let appl_ver: String = row.get(6)?;
+                let appl_type: String = row.get(7)?;
+                let appl_ver: String = row.get(8)?;
                 Ok(JobDetail {
                     id: row.get(0)?,
                     job_name: row.get(1)?,
                     folder_name: row.get(2)?,
-                    application: row.get(3)?,
-                    sub_application: row.get(4)?,
+                    datacenter: row.get(3)?,
+                    folder_order_method: row.get(4)?,
+                    application: row.get(5)?,
+                    sub_application: row.get(6)?,
                     appl_type: if appl_type.is_empty() { None } else { Some(appl_type) },
                     appl_ver: if appl_ver.is_empty() { None } else { Some(appl_ver) },
-                    description: row.get(7)?,
-                    owner: row.get(8)?,
-                    run_as: row.get(9)?,
-                    priority: row.get(10)?,
-                    critical: row.get::<_, i32>(11)? == 1,
-                    task_type: row.get(12)?,
-                    cyclic: row.get::<_, i32>(13)? == 1,
-                    node_id: row.get(14)?,
-                    cmdline: row.get(15)?,
-                    in_conditions_count: row.get(16)?,
-                    out_conditions_count: row.get(17)?,
-                    on_conditions_count: row.get(18)?,
-                    control_resources_count: row.get(19)?,
-                    variables_count: row.get(20)?,
+                    description: row.get(9)?,
+                    owner: row.get(10)?,
+                    run_as: row.get(11)?,
+                    priority: row.get(12)?,
+                    critical: row.get::<_, i32>(13)? == 1,
+                    task_type: row.get(14)?,
+                    cyclic: row.get::<_, i32>(15)? == 1,
+                    node_id: row.get(16)?,
+                    cmdline: row.get(17)?,
+                    in_conditions_count: row.get(18)?,
+                    out_conditions_count: row.get(19)?,
+                    on_conditions_count: row.get(20)?,
+                    control_resources_count: row.get(21)?,
+                    variables_count: row.get(22)?,
                 })
             },
         ).optional()?;
@@ -558,12 +584,37 @@ impl JobRepository {
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
+        let datacenters: Vec<String> = conn.prepare(
+            "SELECT DISTINCT datacenter FROM folders WHERE datacenter IS NOT NULL AND datacenter != '' ORDER BY datacenter"
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        let mut folder_order_methods: Vec<String> = conn.prepare(
+            "SELECT DISTINCT folder_order_method FROM folders WHERE folder_order_method IS NOT NULL AND folder_order_method != '' ORDER BY folder_order_method"
+        )?
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        // Add special "(Empty)" option for folders without folder_order_method
+        let empty_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM folders WHERE folder_order_method IS NULL OR folder_order_method = ''",
+            [],
+            |row| row.get(0)
+        )?;
+        
+        if empty_count > 0 {
+            folder_order_methods.insert(0, "(Empty)".to_string());
+        }
+        
         Ok(FilterOptions {
             folders,
             applications,
             appl_types: appl_type_options,
             appl_vers: appl_ver_options,
             task_types,
+            datacenters,
+            folder_order_methods,
         })
     }
     

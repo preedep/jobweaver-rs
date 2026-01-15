@@ -40,6 +40,8 @@ pub struct JobSearchRequest {
     pub appl_ver: Option<String>,
     pub task_type: Option<String>,
     pub critical: Option<bool>,
+    pub datacenter: Option<String>,
+    pub folder_order_method: Option<String>,
     pub min_dependencies: Option<i32>,
     pub max_dependencies: Option<i32>,
     pub min_on_conditions: Option<i32>,
@@ -73,6 +75,8 @@ pub struct JobDetail {
     pub id: i64,
     pub job_name: String,
     pub folder_name: String,
+    pub datacenter: Option<String>,
+    pub folder_order_method: Option<String>,
     pub application: Option<String>,
     pub sub_application: Option<String>,
     pub appl_type: Option<String>,
@@ -211,6 +215,8 @@ pub struct FilterOptions {
     pub appl_types: Vec<String>,
     pub appl_vers: Vec<String>,
     pub task_types: Vec<String>,
+    pub datacenters: Vec<String>,
+    pub folder_order_methods: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

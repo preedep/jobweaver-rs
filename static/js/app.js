@@ -624,6 +624,8 @@ async function loadFilterOptions() {
             console.log(`  - APPL_TYPE: ${options.appl_types.length}`);
             console.log(`  - APPL_VER: ${options.appl_vers.length}`);
             console.log(`  - Task Types: ${options.task_types.length}`);
+            console.log(`  - Datacenters: ${options.datacenters.length}`);
+            console.log(`  - Folder Order Methods: ${options.folder_order_methods.length}`);
             
             console.log('🎨 [FILTERS] Populating dropdowns...');
             populateSelect('filter-folder', options.folders);
@@ -631,6 +633,8 @@ async function loadFilterOptions() {
             populateSelect('filter-appl-type', options.appl_types);
             populateSelect('filter-appl-ver', options.appl_vers);
             populateSelect('filter-task-type', options.task_types);
+            populateSelect('filter-datacenter', options.datacenters);
+            populateSelect('filter-folder-order-method', options.folder_order_methods);
             
             console.log('🔍 [FILTERS] Initializing Select2...');
             initializeSelect2();
@@ -681,6 +685,8 @@ function collectFilterValues() {
         applType: $('#filter-appl-type').val(),
         applVer: $('#filter-appl-ver').val(),
         taskType: $('#filter-task-type').val(),
+        datacenter: $('#filter-datacenter').val(),
+        folderOrderMethod: $('#filter-folder-order-method').val(),
         critical: document.getElementById('filter-critical')?.value,
         minDeps: document.getElementById('filter-min-deps')?.value?.trim(),
         maxDeps: document.getElementById('filter-max-deps')?.value?.trim(),
@@ -707,6 +713,8 @@ function buildFiltersObject(values) {
     if (values.applType) filters.appl_type = values.applType;
     if (values.applVer) filters.appl_ver = values.applVer;
     if (values.taskType) filters.task_type = values.taskType;
+    if (values.datacenter) filters.datacenter = values.datacenter;
+    if (values.folderOrderMethod) filters.folder_order_method = values.folderOrderMethod;
     if (values.critical && values.critical !== '') filters.critical = values.critical === 'true';
     if (values.minDeps) filters.min_dependencies = parseInt(values.minDeps);
     if (values.maxDeps) filters.max_dependencies = parseInt(values.maxDeps);
@@ -859,7 +867,7 @@ function renderJobsTable(data) {
     }
     
     if (data.jobs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="15" class="text-center">No jobs found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="17" class="text-center">No jobs found</td></tr>';
         updateResultsInfo({ jobs: [], total: 0 });
         return;
     }
@@ -914,6 +922,8 @@ function renderJobRow(job) {
         <tr>
             <td><strong>${escapeHtml(job.job_name)}</strong></td>
             <td><span title="${escapeHtml(job.folder_name)}">${escapeHtml(job.folder_name)}</span></td>
+            <td>${escapeHtml(job.datacenter || '-')}</td>
+            <td>${escapeHtml(job.folder_order_method || '-')}</td>
             <td>${escapeHtml(job.application || '-')}</td>
             <td>${escapeHtml(job.sub_application || '-')}</td>
             <td>${escapeHtml(job.appl_type || '-')}</td>

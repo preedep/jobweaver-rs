@@ -342,6 +342,22 @@
                                         <option value="">All Applications</option>
                                     </select>
                                 </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-datacenter">
+                                        <i class="fas fa-server"></i> Datacenter
+                                    </label>
+                                    <select id="filter-datacenter" class="select2-dropdown select-modern">
+                                        <option value="">All Datacenters</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label for="filter-folder-order-method">
+                                        <i class="fas fa-sort"></i> Folder Order Method
+                                    </label>
+                                    <select id="filter-folder-order-method" class="select2-dropdown select-modern">
+                                        <option value="">All Order Methods</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
@@ -481,6 +497,8 @@
                                 <tr>
                                     <th data-sort="job_name">Job Name <i class="fas fa-sort"></i></th>
                                     <th data-sort="folder_name">Folder <i class="fas fa-sort"></i></th>
+                                    <th data-sort="datacenter">Datacenter <i class="fas fa-sort"></i></th>
+                                    <th data-sort="folder_order_method">Order Method <i class="fas fa-sort"></i></th>
                                     <th data-sort="application">Application <i class="fas fa-sort"></i></th>
                                     <th data-sort="sub_application">Sub App <i class="fas fa-sort"></i></th>
                                     <th data-sort="appl_type">APPL Type <i class="fas fa-sort"></i></th>
@@ -498,7 +516,7 @@
                             </thead>
                             <tbody id="jobs-table-body">
                                 <tr>
-                                    <td colspan="15" class="text-center">
+                                    <td colspan="17" class="text-center">
                                         <div class="loading-state">
                                             <i class="fas fa-spinner fa-spin"></i> Loading...
                                         </div>
