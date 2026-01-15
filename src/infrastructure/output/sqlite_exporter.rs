@@ -1,28 +1,64 @@
+//! SQLite Database Exporter module
+//!
+//! This module provides functionality to export Control-M job definitions
+//! to a SQLite database with optimized schema and indexing for fast queries.
+//! Supports progress reporting and bulk insert operations.
+
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params, Transaction};
 use std::path::Path;
 use crate::domain::entities::*;
 
+/// Type alias for progress callback function
+///
+/// Callbacks receive progress messages during export operations
 pub type ProgressCallback = Box<dyn Fn(&str)>;
 
+/// SQLite database exporter for Control-M job definitions
+///
+/// Exports folders, jobs, and all related entities (conditions, resources, variables)
+/// to a SQLite database with a normalized schema. Optimized for bulk inserts
+/// with WAL mode and appropriate indexing for fast queries.
 pub struct SqliteExporter {
+    /// SQLite database connection
     conn: Connection,
+    /// Optional callback for progress reporting
     progress_callback: Option<ProgressCallback>,
+    /// Counter for tracking exported jobs (used for throttled progress reporting)
     job_counter: std::cell::Cell<usize>,
 }
 
 impl SqliteExporter {
+    /// Creates a new SQLite exporter and initializes the database
+    ///
+    /// Opens or creates a SQLite database at the specified path,
+    /// configures it for optimal bulk insert performance, and creates
+    /// the necessary schema.
+    ///
+    /// # Arguments
+    ///
+    /// * `db_path` - Path to the SQLite database file
+    ///
+    /// # Returns
+    ///
+    /// Result containing the SqliteExporter or an error
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Database file cannot be opened/created
+    /// - Schema creation fails
     pub fn new<P: AsRef<Path>>(db_path: P) -> Result<Self> {
         let conn = Connection::open(db_path)
             .context("Failed to open SQLite database")?;
         
-        // Optimize SQLite for bulk inserts
+        // Optimize SQLite for bulk inserts with WAL mode and memory optimizations
         conn.execute_batch(
             r#"
-            PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            PRAGMA cache_size = 10000;
-            PRAGMA temp_store = MEMORY;
+            PRAGMA journal_mode = WAL;        -- Write-Ahead Logging for better concurrency
+            PRAGMA synchronous = NORMAL;      -- Balance between safety and speed
+            PRAGMA cache_size = 10000;        -- Larger cache for better performance
+            PRAGMA temp_store = MEMORY;       -- Store temp tables in memory
             "#
         )?;
         
@@ -36,6 +72,17 @@ impl SqliteExporter {
         Ok(exporter)
     }
 
+    /// Adds a progress callback to the exporter
+    ///
+    /// The callback will be invoked during export operations to report progress.
+    ///
+    /// # Arguments
+    ///
+    /// * `callback` - Function to call with progress messages
+    ///
+    /// # Returns
+    ///
+    /// Self for method chaining
     pub fn with_progress_callback<F>(mut self, callback: F) -> Self 
     where
         F: Fn(&str) + 'static,
@@ -44,12 +91,26 @@ impl SqliteExporter {
         self
     }
 
+    /// Reports progress to the callback if one is set
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - Progress message to report
     fn report_progress(&self, message: &str) {
         if let Some(callback) = &self.progress_callback {
             callback(message);
         }
     }
 
+    /// Reports progress with throttling to avoid excessive callbacks
+    ///
+    /// Only reports every 10 jobs unless forced, reducing callback overhead
+    /// during bulk operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - Progress message to report
+    /// * `force` - If true, bypasses throttling and always reports
     fn report_progress_throttled(&self, message: &str, force: bool) {
         let count = self.job_counter.get();
         // Report every 10 jobs or when forced
@@ -58,6 +119,17 @@ impl SqliteExporter {
         }
     }
 
+    /// Creates the database schema with all tables and indexes
+    ///
+    /// Creates a normalized schema with:
+    /// - Folders and jobs tables
+    /// - Child tables for conditions, resources, variables
+    /// - Comprehensive indexes for query performance
+    /// - Foreign key constraints with CASCADE delete
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn create_schema(&self) -> Result<()> {
         self.conn.execute_batch(
             r#"
@@ -239,10 +311,22 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports folders and all their jobs to the database
+    ///
+    /// Exports all folders recursively, including jobs and sub-folders,
+    /// within a single transaction for atomicity and performance.
+    ///
+    /// # Arguments
+    ///
+    /// * `folders` - Slice of Folder entities to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     pub fn export_folders(&self, folders: &[Folder]) -> Result<()> {
         self.report_progress("Starting export...");
         
-        // Use transaction for all exports
+        // Use transaction for all exports (atomic and faster)
         let tx = self.conn.unchecked_transaction()?;
         
         for (idx, folder) in folders.iter().enumerate() {
@@ -258,7 +342,20 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports a single folder within a transaction
+    ///
+    /// Recursively exports the folder, all its jobs, and sub-folders.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `folder` - Folder entity to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_folder_tx(&self, tx: &Transaction, folder: &Folder) -> Result<()> {
+        // Convert folder type enum to string for database storage
         let folder_type_str = match folder.folder_type {
             FolderType::Simple => "Simple",
             FolderType::Smart => "Smart",
@@ -282,10 +379,12 @@ impl SqliteExporter {
             ],
         ).context("Failed to insert folder")?;
 
+        // Export all jobs in this folder
         for job in &folder.jobs {
             self.export_job_tx(tx, job)?;
         }
 
+        // Recursively export sub-folders
         for sub_folder in &folder.sub_folders {
             self.export_folder_tx(tx, sub_folder)?;
         }
@@ -293,11 +392,25 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports a single job and all its related entities within a transaction
+    ///
+    /// Exports the job along with scheduling info, conditions, resources,
+    /// variables, and metadata.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job` - Job entity to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_job_tx(&self, tx: &Transaction, job: &Job) -> Result<()> {
+        // Increment job counter for progress reporting
         let count = self.job_counter.get() + 1;
         self.job_counter.set(count);
         
-        // Throttled progress reporting (every 10 jobs)
+        // Throttled progress reporting (every 10 jobs to reduce overhead)
         self.report_progress_throttled(&format!("Job: {}", job.job_name), false);
         
         tx.prepare_cached(
@@ -347,6 +460,17 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports job scheduling information within a transaction
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `scheduling` - Scheduling information to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_job_scheduling_tx(&self, tx: &Transaction, job_id: i64, scheduling: &SchedulingInfo) -> Result<()> {
         tx.execute(
             r#"
@@ -367,6 +491,19 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports input conditions for a job within a transaction
+    ///
+    /// Uses prepared statements for efficient batch insertion.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `conditions` - Slice of conditions to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_in_conditions_tx(&self, tx: &Transaction, job_id: i64, conditions: &[Condition]) -> Result<()> {
         if conditions.is_empty() {
             return Ok(());
@@ -390,6 +527,19 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports output conditions for a job within a transaction
+    ///
+    /// Uses prepared statements for efficient batch insertion.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `conditions` - Slice of conditions to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_out_conditions_tx(&self, tx: &Transaction, job_id: i64, conditions: &[Condition]) -> Result<()> {
         if conditions.is_empty() {
             return Ok(());
@@ -412,6 +562,20 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports ON conditions and their actions for a job within a transaction
+    ///
+    /// ON conditions are event-based triggers with associated actions.
+    /// Exports both the condition and all its actions.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `on_conditions` - Slice of ON conditions to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_on_conditions_tx(&self, tx: &Transaction, job_id: i64, on_conditions: &[OnCondition]) -> Result<()> {
         if on_conditions.is_empty() {
             return Ok(());
@@ -429,8 +593,10 @@ impl SqliteExporter {
                 &on_cond.pattern,
             ]).context("Failed to insert on condition")?;
 
+            // Get the ID of the just-inserted ON condition
             let on_condition_id = tx.last_insert_rowid();
 
+            // Export all actions for this ON condition
             for action in &on_cond.actions {
                 self.export_do_action_tx(tx, on_condition_id, action)?;
             }
@@ -438,7 +604,22 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports a single DO action for an ON condition within a transaction
+    ///
+    /// Converts the DoAction enum to database-friendly format with
+    /// action type, value, and additional data fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `on_condition_id` - ID of the parent ON condition
+    /// * `action` - DoAction to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_do_action_tx(&self, tx: &Transaction, on_condition_id: i64, action: &DoAction) -> Result<()> {
+        // Convert DoAction enum to database fields
         let (action_type, action_value, additional_data) = match action {
             DoAction::Action(val) => ("Action", val.clone(), None),
             DoAction::Condition { name, sign } => {
@@ -475,6 +656,19 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports control resources for a job within a transaction
+    ///
+    /// Control resources act as mutexes for job synchronization.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `resources` - Slice of control resources to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_control_resources_tx(&self, tx: &Transaction, job_id: i64, resources: &[ControlResource]) -> Result<()> {
         if resources.is_empty() {
             return Ok(());
@@ -495,6 +689,19 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports quantitative resources for a job within a transaction
+    ///
+    /// Quantitative resources manage limited resource pools with quantities.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `resources` - Slice of quantitative resources to export
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_quantitative_resources_tx(&self, tx: &Transaction, job_id: i64, resources: &[QuantitativeResource]) -> Result<()> {
         if resources.is_empty() {
             return Ok(());
@@ -516,6 +723,17 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports job variables within a transaction
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `variables` - HashMap of variable names to values
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_variables_tx(&self, tx: &Transaction, job_id: i64, variables: &std::collections::HashMap<String, String>) -> Result<()> {
         if variables.is_empty() {
             return Ok(());
@@ -532,6 +750,19 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports job auto-edits within a transaction
+    ///
+    /// Auto-edits are automatic variable modifications.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `auto_edits` - HashMap of auto-edit names to values
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_auto_edits_tx(&self, tx: &Transaction, job_id: i64, auto_edits: &std::collections::HashMap<String, String>) -> Result<()> {
         if auto_edits.is_empty() {
             return Ok(());
@@ -548,6 +779,19 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Exports job metadata within a transaction
+    ///
+    /// Metadata stores additional key-value pairs for jobs.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx` - Active database transaction
+    /// * `job_id` - ID of the parent job
+    /// * `metadata` - HashMap of metadata keys to values
+    ///
+    /// # Returns
+    ///
+    /// Result indicating success or error
     fn export_metadata_tx(&self, tx: &Transaction, job_id: i64, metadata: &std::collections::HashMap<String, String>) -> Result<()> {
         if metadata.is_empty() {
             return Ok(());
@@ -564,6 +808,13 @@ impl SqliteExporter {
         Ok(())
     }
 
+    /// Retrieves statistics about the exported data
+    ///
+    /// Queries the database to count folders, jobs, conditions, and resources.
+    ///
+    /// # Returns
+    ///
+    /// Result containing DatabaseStatistics or an error
     pub fn get_statistics(&self) -> Result<DatabaseStatistics> {
         let folder_count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM folders",
@@ -605,12 +856,20 @@ impl SqliteExporter {
     }
 }
 
+/// Database statistics structure
+///
+/// Contains counts of various entities in the exported database.
 #[derive(Debug)]
 pub struct DatabaseStatistics {
+    /// Number of folders in the database
     pub folder_count: usize,
+    /// Number of jobs in the database
     pub job_count: usize,
+    /// Number of input conditions in the database
     pub in_condition_count: usize,
+    /// Number of output conditions in the database
     pub out_condition_count: usize,
+    /// Number of control resources in the database
     pub control_resource_count: usize,
 }
 
@@ -618,6 +877,7 @@ pub struct DatabaseStatistics {
 mod tests {
     use super::*;
 
+    /// Tests creating an exporter with in-memory database
     #[test]
     fn test_create_exporter() {
         let exporter = SqliteExporter::new(":memory:").unwrap();
@@ -626,6 +886,7 @@ mod tests {
         assert_eq!(stats.job_count, 0);
     }
 
+    /// Tests exporting a simple folder
     #[test]
     fn test_export_folder() {
         let exporter = SqliteExporter::new(":memory:").unwrap();
@@ -638,6 +899,7 @@ mod tests {
         assert_eq!(stats.folder_count, 1);
     }
 
+    /// Tests exporting a job with conditions
     #[test]
     fn test_export_job_with_conditions() {
         let exporter = SqliteExporter::new(":memory:").unwrap();
