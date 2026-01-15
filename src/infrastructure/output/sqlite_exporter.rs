@@ -435,6 +435,18 @@ impl SqliteExporter {
             CREATE INDEX IF NOT EXISTS idx_job_variables_job ON job_variables(job_id);
             CREATE INDEX IF NOT EXISTS idx_job_auto_edits_job ON job_auto_edits(job_id);
             CREATE INDEX IF NOT EXISTS idx_job_metadata_job ON job_metadata(job_id);
+            
+            -- ODATE indexes for performance (composite indexes for ODATE filters)
+            CREATE INDEX IF NOT EXISTS idx_in_conditions_odate ON in_conditions(job_id, odate);
+            CREATE INDEX IF NOT EXISTS idx_out_conditions_odate ON out_conditions(job_id, odate);
+            
+            -- Condition name indexes for lookups
+            CREATE INDEX IF NOT EXISTS idx_in_conditions_name ON in_conditions(condition_name);
+            CREATE INDEX IF NOT EXISTS idx_out_conditions_name ON out_conditions(condition_name);
+            
+            -- Composite indexes for folder filters
+            CREATE INDEX IF NOT EXISTS idx_folders_name_datacenter ON folders(folder_name, datacenter);
+            CREATE INDEX IF NOT EXISTS idx_folders_name_order_method ON folders(folder_name, folder_order_method);
             "#
         ).context("Failed to create database schema")?;
 
