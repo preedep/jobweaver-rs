@@ -1,18 +1,62 @@
+//! Migration Priority value object module
+//!
+//! This module defines the MigrationPriority value object which determines
+//! the order in which jobs should be migrated.
+
 use serde::{Deserialize, Serialize};
 use super::{ComplexityScore, MigrationDifficulty};
 
+/// Represents the priority level for migrating a job
+///
+/// Priority is calculated based on complexity (easier jobs get higher priority),
+/// criticality (critical jobs get bonus priority), and dependencies (more
+/// dependencies reduce priority). Higher values mean higher priority.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MigrationPriority(u32);
 
 impl MigrationPriority {
+    /// Creates a new MigrationPriority with the given value
+    ///
+    /// # Arguments
+    ///
+    /// * `priority` - The priority value (higher is more important)
+    ///
+    /// # Returns
+    ///
+    /// A new MigrationPriority instance
     pub fn new(priority: u32) -> Self {
         Self(priority)
     }
 
+    /// Returns the numeric value of the priority
+    ///
+    /// # Returns
+    ///
+    /// The underlying u32 priority value
     pub fn value(&self) -> u32 {
         self.0
     }
 
+    /// Calculates migration priority from job characteristics
+    ///
+    /// Priority calculation strategy:
+    /// - Base priority: Easy=100, Medium=50, Hard=10
+    /// - Critical bonus: +50 for critical jobs
+    /// - Dependency penalty: -2 per dependency
+    /// - Minimum priority: 1 (never zero)
+    ///
+    /// This encourages migrating easier jobs first while giving critical
+    /// jobs higher priority regardless of complexity.
+    ///
+    /// # Arguments
+    ///
+    /// * `complexity_score` - The job's complexity score
+    /// * `is_critical` - Whether the job is marked as critical
+    /// * `dependency_count` - Number of dependencies the job has
+    ///
+    /// # Returns
+    ///
+    /// A calculated MigrationPriority
     pub fn calculate(
         complexity_score: ComplexityScore,
         is_critical: bool,
@@ -20,18 +64,23 @@ impl MigrationPriority {
     ) -> Self {
         let difficulty = MigrationDifficulty::from_complexity_score(complexity_score);
         
+        // Base priority favors easier jobs
         let base_priority: u32 = match difficulty {
-            MigrationDifficulty::Easy => 100,
-            MigrationDifficulty::Medium => 50,
-            MigrationDifficulty::Hard => 10,
+            MigrationDifficulty::Easy => 100,    // Highest base priority
+            MigrationDifficulty::Medium => 50,   // Medium base priority
+            MigrationDifficulty::Hard => 10,     // Lowest base priority
         };
 
+        // Critical jobs get a significant bonus
         let critical_bonus: u32 = if is_critical { 50 } else { 0 };
         
+        // Dependencies reduce priority (migrate independent jobs first)
         let dependency_penalty: u32 = (dependency_count as u32) * 2;
 
+        // Calculate final priority with saturation to prevent overflow/underflow
         let priority = base_priority.saturating_add(critical_bonus).saturating_sub(dependency_penalty);
         
+        // Ensure priority is never zero
         Self(priority.max(1))
     }
 }

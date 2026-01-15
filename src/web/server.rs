@@ -1,3 +1,8 @@
+//! Web server module
+//!
+//! This module configures and starts the Actix-Web HTTP server with all routes,
+//! middleware, and static file serving.
+
 use actix_web::{web, App, HttpServer, middleware};
 use actix_cors::Cors;
 use actix_files as fs;
@@ -7,10 +12,26 @@ use tracing::info;
 
 use crate::web::{handlers, auth, config::WebConfig, repository::JobRepository};
 
+/// Starts the web server with the given configuration
+///
+/// Configures and runs an Actix-Web server with:
+/// - CORS support for cross-origin requests
+/// - JWT authentication middleware
+/// - API routes for job management and authentication
+/// - Static file serving for the web UI
+///
+/// # Arguments
+///
+/// * `config` - Web server configuration
+///
+/// # Returns
+///
+/// Result indicating success or IO error
 pub async fn start_web_server(config: WebConfig) -> std::io::Result<()> {
     info!("Starting web server on {}:{}", config.host, config.port);
     info!("Database: {}", config.database_path);
     
+    // Initialize shared application state
     let repository = Arc::new(
         JobRepository::new(&config.database_path)
             .expect("Failed to open database")
@@ -23,25 +44,33 @@ pub async fn start_web_server(config: WebConfig) -> std::io::Result<()> {
     let user_store_data = web::Data::new(user_store);
     
     let server = HttpServer::new(move || {
+        // Configure CORS to allow requests from any origin
         let cors = Cors::default()
             .allow_any_origin()
             .allow_any_method()
             .allow_any_header()
             .max_age(3600);
         
+        // Configure JWT bearer token authentication middleware
         let auth_middleware = HttpAuthentication::bearer(auth::validator);
         
         App::new()
+            // Add logging middleware
             .wrap(middleware::Logger::default())
+            // Add CORS middleware
             .wrap(cors)
+            // Inject shared application state
             .app_data(config_data.clone())
             .app_data(repository_data.clone())
             .app_data(user_store_data.clone())
+            // API routes
             .service(
                 web::scope("/api")
+                    // Public routes (no authentication required)
                     .route("/health", web::get().to(handlers::health_check))
                     .route("/auth/login", web::post().to(handlers::login))
                     .route("/auth/entra-callback", web::post().to(handlers::entra_id_callback))
+                    // Protected routes (authentication required)
                     .service(
                         web::scope("")
                             .wrap(auth_middleware)
@@ -54,6 +83,7 @@ pub async fn start_web_server(config: WebConfig) -> std::io::Result<()> {
                             .route("/filters", web::get().to(handlers::get_filter_options))
                     )
             )
+            // Serve static files (web UI)
             .service(fs::Files::new("/", "./static").index_file("index.html"))
     })
     .bind((config.host.as_str(), config.port))?;
