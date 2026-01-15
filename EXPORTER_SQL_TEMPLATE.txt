@@ -1,0 +1,62 @@
+-- Complete SQL INSERT statement for jobs table with all attributes
+-- Use this as reference for updating export_job_tx function
+
+INSERT OR REPLACE INTO jobs (
+    job_name, folder_name, application, sub_application, appl_type, appl_ver,
+    description, owner, run_as, priority, critical, task_type, cyclic,
+    node_id, cmdline,
+    jobisn, job_group, memname, author, doclib, docmem, job_interval,
+    override_path, overlib, memlib, confirm, retro, maxwait, maxrerun,
+    autoarch, maxdays, maxruns, days, weekdays,
+    jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec,
+    date, rerunmem, days_and_or, category, shift, shiftnum, pdsname,
+    minimum, preventnct2, option_field, from_field, par, sysdb,
+    due_out, reten_days, reten_gen, task_class, prev_day, adjust_cond,
+    jobs_in_group, large_size, ind_cyclic,
+    creation_user, creation_time, created_by, creation_date,
+    change_userid, change_date, change_time,
+    job_version, version_opcode, is_current_version, version_serial, version_host,
+    rule_based_calendar_relationship, tag_relationship, timezone,
+    appl_form, cm_ver, multy_agent, active_from, active_till,
+    scheduling_environment, system_affinity, request_nje_node, stat_cal,
+    instream_jcl, use_instream_jcl, due_out_daysoffset, from_daysoffset,
+    to_daysoffset, cyclic_interval_sequence, cyclic_times_sequence,
+    cyclic_tolerance, cyclic_type, parent_folder, parent_table,
+    end_folder, odate, fprocs, tpgms, tprocs
+) VALUES (
+    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+    ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
+    ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41,
+    ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54,
+    ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67,
+    ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80,
+    ?81, ?82, ?83, ?84, ?85, ?86, ?87, ?88, ?89, ?90, ?91, ?92, ?93,
+    ?94, ?95, ?96, ?97, ?98, ?99, ?100, ?101, ?102, ?103, ?104, ?105,
+    ?106, ?107, ?108, ?109, ?110, ?111, ?112, ?113, ?114, ?115, ?116,
+    ?117, ?118, ?119, ?120
+);
+
+-- Params order (120 parameters):
+-- 1-15: Core attributes
+-- 16-33: Additional metadata
+-- 34-45: Monthly scheduling (12 months)
+-- 46-65: Scheduling details
+-- 66-75: Audit fields
+-- 76-80: Version control
+-- 81-100: Advanced features
+-- 101-110: Cyclic attributes
+-- 111-120: Hierarchy and other
+
+-- Complete SQL INSERT for job_scheduling
+INSERT OR REPLACE INTO job_scheduling (
+    job_id, time_from, time_to, days, weekdays, days_calendar,
+    weeks_calendar, conf_calendar, stat_cal, cyclic_interval, cyclic_times,
+    max_wait, max_rerun, maxdays, maxruns, date, days_and_or,
+    shift, shift_num, retro, autoarch, confirm, timezone,
+    active_from, active_till, due_out, due_out_daysoffset,
+    from_daysoffset, to_daysoffset, prev_day, adjust_cond
+) VALUES (
+    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+    ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
+    ?27, ?28, ?29, ?30, ?31
+);

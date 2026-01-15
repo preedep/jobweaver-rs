@@ -174,8 +174,34 @@ impl ControlMXmlParser {
             .to_string();
         
         let mut folder = Folder::new(folder_name, folder_type);
+        
+        // Core attributes
         folder.datacenter = node.attribute("DATACENTER").map(|s| s.to_string());
         folder.application = node.attribute("APPLICATION").map(|s| s.to_string());
+        folder.description = node.attribute("DESCRIPTION").map(|s| s.to_string());
+        folder.owner = node.attribute("OWNER").map(|s| s.to_string());
+        
+        // Additional folder metadata
+        folder.version = node.attribute("VERSION").map(|s| s.to_string());
+        folder.platform = node.attribute("PLATFORM").map(|s| s.to_string());
+        folder.table_name = node.attribute("TABLE_NAME").map(|s| s.to_string());
+        folder.folder_dsn = node.attribute("FOLDER_DSN").map(|s| s.to_string());
+        folder.table_dsn = node.attribute("TABLE_DSN").map(|s| s.to_string());
+        folder.modified = node.attribute("MODIFIED").and_then(|s| match s {
+            "1" | "true" | "True" => Some(true),
+            "0" | "false" | "False" => Some(false),
+            _ => None,
+        });
+        folder.last_upload = node.attribute("LAST_UPLOAD").map(|s| s.to_string());
+        folder.folder_order_method = node.attribute("FOLDER_ORDER_METHOD").map(|s| s.to_string());
+        folder.table_userdaily = node.attribute("TABLE_USERDAILY").map(|s| s.to_string());
+        folder.real_folder_id = node.attribute("REAL_FOLDER_ID").and_then(|s| s.parse().ok());
+        folder.real_tableid = node.attribute("REAL_TABLEID").and_then(|s| s.parse().ok());
+        folder.type_code = node.attribute("TYPE").and_then(|s| s.parse().ok());
+        folder.used_by = node.attribute("USED_BY").map(|s| s.to_string());
+        folder.used_by_code = node.attribute("USED_BY_CODE").and_then(|s| s.parse().ok());
+        folder.enforce_validation = node.attribute("ENFORCE_VALIDATION").map(|s| s.to_string());
+        folder.site_standard_name = node.attribute("SITE_STANDARD_NAME").map(|s| s.to_string());
         
         // Parse all jobs within this folder
         for child in node.children() {
@@ -226,6 +252,7 @@ impl ControlMXmlParser {
     /// * `node` - XML node containing job attributes
     /// * `job` - Mutable reference to Job to populate
     fn parse_basic_attributes(&self, node: &roxmltree::Node, job: &mut Job) {
+        // Core attributes
         job.application = node.attribute("APPLICATION").map(|s| s.to_string());
         job.sub_application = node.attribute("SUB_APPLICATION").map(|s| s.to_string());
         job.appl_type = node.attribute("APPL_TYPE").map(|s| s.to_string());
@@ -239,6 +266,113 @@ impl ControlMXmlParser {
         job.cyclic = node.attribute("CYCLIC") == Some("Y");
         job.node_id = node.attribute("NODEID").map(|s| s.to_string());
         job.cmdline = node.attribute("CMDLINE").map(|s| s.to_string());
+        
+        // Additional job metadata
+        job.jobisn = self.get_int_attr(node, "JOBISN");
+        job.group = node.attribute("GROUP").map(|s| s.to_string());
+        job.memname = node.attribute("MEMNAME").map(|s| s.to_string());
+        job.author = node.attribute("AUTHOR").map(|s| s.to_string());
+        job.doclib = node.attribute("DOCLIB").map(|s| s.to_string());
+        job.docmem = node.attribute("DOCMEM").map(|s| s.to_string());
+        job.interval = node.attribute("INTERVAL").map(|s| s.to_string());
+        job.override_path = node.attribute("OVERRIDE_PATH").map(|s| s.to_string());
+        job.overlib = node.attribute("OVERLIB").map(|s| s.to_string());
+        job.memlib = node.attribute("MEMLIB").map(|s| s.to_string());
+        job.confirm = node.attribute("CONFIRM").map(|s| s.to_string());
+        job.retro = node.attribute("RETRO").map(|s| s.to_string());
+        job.maxwait = self.get_int_attr(node, "MAXWAIT");
+        job.maxrerun = self.get_int_attr(node, "MAXRERUN");
+        job.autoarch = node.attribute("AUTOARCH").map(|s| s.to_string());
+        job.maxdays = self.get_int_attr(node, "MAXDAYS");
+        job.maxruns = self.get_int_attr(node, "MAXRUNS");
+        
+        // Scheduling attributes
+        job.days = node.attribute("DAYS").map(|s| s.to_string());
+        job.weekdays = node.attribute("WEEKDAYS").map(|s| s.to_string());
+        job.jan = node.attribute("JAN").map(|s| s.to_string());
+        job.feb = node.attribute("FEB").map(|s| s.to_string());
+        job.mar = node.attribute("MAR").map(|s| s.to_string());
+        job.apr = node.attribute("APR").map(|s| s.to_string());
+        job.may = node.attribute("MAY").map(|s| s.to_string());
+        job.jun = node.attribute("JUN").map(|s| s.to_string());
+        job.jul = node.attribute("JUL").map(|s| s.to_string());
+        job.aug = node.attribute("AUG").map(|s| s.to_string());
+        job.sep = node.attribute("SEP").map(|s| s.to_string());
+        job.oct = node.attribute("OCT").map(|s| s.to_string());
+        job.nov = node.attribute("NOV").map(|s| s.to_string());
+        job.dec = node.attribute("DEC").map(|s| s.to_string());
+        job.date = node.attribute("DATE").map(|s| s.to_string());
+        job.rerunmem = node.attribute("RERUNMEM").map(|s| s.to_string());
+        job.days_and_or = node.attribute("DAYS_AND_OR").map(|s| s.to_string());
+        job.category = node.attribute("CATEGORY").map(|s| s.to_string());
+        job.shift = node.attribute("SHIFT").map(|s| s.to_string());
+        job.shiftnum = node.attribute("SHIFTNUM").map(|s| s.to_string());
+        job.pdsname = node.attribute("PDSNAME").map(|s| s.to_string());
+        job.minimum = node.attribute("MINIMUM").map(|s| s.to_string());
+        job.preventnct2 = node.attribute("PREVENTNCT2").map(|s| s.to_string());
+        job.option = node.attribute("OPTION").map(|s| s.to_string());
+        job.from = node.attribute("FROM").map(|s| s.to_string());
+        job.par = node.attribute("PAR").map(|s| s.to_string());
+        job.sysdb = node.attribute("SYSDB").map(|s| s.to_string());
+        job.due_out = node.attribute("DUE_OUT").map(|s| s.to_string());
+        job.reten_days = node.attribute("RETEN_DAYS").map(|s| s.to_string());
+        job.reten_gen = node.attribute("RETEN_GEN").map(|s| s.to_string());
+        job.task_class = node.attribute("TASK_CLASS").map(|s| s.to_string());
+        job.prev_day = node.attribute("PREV_DAY").map(|s| s.to_string());
+        job.adjust_cond = node.attribute("ADJUST_COND").map(|s| s.to_string());
+        job.jobs_in_group = node.attribute("JOBS_IN_GROUP").map(|s| s.to_string());
+        job.large_size = node.attribute("LARGE_SIZE").map(|s| s.to_string());
+        job.ind_cyclic = node.attribute("IND_CYCLIC").map(|s| s.to_string());
+        
+        // Audit fields
+        job.creation_user = node.attribute("CREATION_USER").map(|s| s.to_string());
+        job.creation_time = node.attribute("CREATION_TIME").map(|s| s.to_string());
+        job.created_by = node.attribute("CREATED_BY").map(|s| s.to_string());
+        job.creation_date = node.attribute("CREATION_DATE").map(|s| s.to_string());
+        job.change_userid = node.attribute("CHANGE_USERID").map(|s| s.to_string());
+        job.change_date = node.attribute("CHANGE_DATE").map(|s| s.to_string());
+        job.change_time = node.attribute("CHANGE_TIME").map(|s| s.to_string());
+        
+        // Version control
+        job.job_version = node.attribute("JOB_VERSION").map(|s| s.to_string());
+        job.version_opcode = node.attribute("VERSION_OPCODE").map(|s| s.to_string());
+        job.is_current_version = node.attribute("IS_CURRENT_VERSION").map(|s| s.to_string());
+        job.version_serial = self.get_int_attr(node, "VERSION_SERIAL");
+        job.version_host = node.attribute("VERSION_HOST").map(|s| s.to_string());
+        
+        // Advanced features
+        job.rule_based_calendar_relationship = node.attribute("RULE_BASED_CALENDAR_RELATIONSHIP").map(|s| s.to_string());
+        job.tag_relationship = node.attribute("TAG_RELATIONSHIP").map(|s| s.to_string());
+        job.timezone = node.attribute("TIMEZONE").map(|s| s.to_string());
+        job.appl_form = node.attribute("APPL_FORM").map(|s| s.to_string());
+        job.cm_ver = node.attribute("CM_VER").map(|s| s.to_string());
+        job.multy_agent = node.attribute("MULTY_AGENT").map(|s| s.to_string());
+        job.active_from = node.attribute("ACTIVE_FROM").map(|s| s.to_string());
+        job.active_till = node.attribute("ACTIVE_TILL").map(|s| s.to_string());
+        job.scheduling_environment = node.attribute("SCHEDULING_ENVIRONMENT").map(|s| s.to_string());
+        job.system_affinity = node.attribute("SYSTEM_AFFINITY").map(|s| s.to_string());
+        job.request_nje_node = node.attribute("REQUEST_NJE_NODE").map(|s| s.to_string());
+        job.stat_cal = node.attribute("STAT_CAL").map(|s| s.to_string());
+        job.instream_jcl = node.attribute("INSTREAM_JCL").map(|s| s.to_string());
+        job.use_instream_jcl = node.attribute("USE_INSTREAM_JCL").map(|s| s.to_string());
+        job.due_out_daysoffset = node.attribute("DUE_OUT_DAYSOFFSET").map(|s| s.to_string());
+        job.from_daysoffset = node.attribute("FROM_DAYSOFFSET").map(|s| s.to_string());
+        job.to_daysoffset = node.attribute("TO_DAYSOFFSET").map(|s| s.to_string());
+        
+        // Cyclic attributes
+        job.cyclic_interval_sequence = node.attribute("CYCLIC_INTERVAL_SEQUENCE").map(|s| s.to_string());
+        job.cyclic_times_sequence = node.attribute("CYCLIC_TIMES_SEQUENCE").map(|s| s.to_string());
+        job.cyclic_tolerance = self.get_int_attr(node, "CYCLIC_TOLERANCE");
+        job.cyclic_type = node.attribute("CYCLIC_TYPE").map(|s| s.to_string());
+        
+        // Hierarchy
+        job.parent_folder = node.attribute("PARENT_FOLDER").map(|s| s.to_string());
+        job.parent_table = node.attribute("PARENT_TABLE").map(|s| s.to_string());
+        job.end_folder = node.attribute("END_FOLDER").map(|s| s.to_string());
+        job.odate = node.attribute("ODATE").map(|s| s.to_string());
+        job.fprocs = node.attribute("FPROCS").map(|s| s.to_string());
+        job.tpgms = node.attribute("TPGMS").map(|s| s.to_string());
+        job.tprocs = node.attribute("TPROCS").map(|s| s.to_string());
     }
     
     /// Parses scheduling-related attributes from XML node
@@ -252,9 +386,35 @@ impl ControlMXmlParser {
     fn parse_scheduling_attributes(&self, node: &roxmltree::Node, job: &mut Job) {
         job.scheduling.time_from = node.attribute("TIMEFROM").map(|s| s.to_string());
         job.scheduling.time_to = node.attribute("TIMETO").map(|s| s.to_string());
+        job.scheduling.days = node.attribute("DAYS").map(|s| s.to_string());
+        job.scheduling.weekdays = node.attribute("WEEKDAYS").map(|s| s.to_string());
         job.scheduling.days_calendar = node.attribute("DAYSCAL").map(|s| s.to_string());
         job.scheduling.weeks_calendar = node.attribute("WEEKSCAL").map(|s| s.to_string());
         job.scheduling.conf_calendar = node.attribute("CONFCAL").map(|s| s.to_string());
+        job.scheduling.cyclic_interval = node.attribute("INTERVAL").map(|s| s.to_string());
+        job.scheduling.max_wait = self.get_int_attr(node, "MAXWAIT");
+        job.scheduling.max_rerun = self.get_int_attr(node, "MAXRERUN");
+        
+        // Additional scheduling attributes
+        job.scheduling.shift = node.attribute("SHIFT").map(|s| s.to_string());
+        job.scheduling.shift_num = node.attribute("SHIFTNUM").map(|s| s.to_string());
+        job.scheduling.retro = node.attribute("RETRO").map(|s| s.to_string());
+        job.scheduling.stat_cal = node.attribute("STAT_CAL").map(|s| s.to_string());
+        job.scheduling.date = node.attribute("DATE").map(|s| s.to_string());
+        job.scheduling.days_and_or = node.attribute("DAYS_AND_OR").map(|s| s.to_string());
+        job.scheduling.maxdays = self.get_int_attr(node, "MAXDAYS");
+        job.scheduling.maxruns = self.get_int_attr(node, "MAXRUNS");
+        job.scheduling.autoarch = node.attribute("AUTOARCH").map(|s| s.to_string());
+        job.scheduling.confirm = node.attribute("CONFIRM").map(|s| s.to_string());
+        job.scheduling.timezone = node.attribute("TIMEZONE").map(|s| s.to_string());
+        job.scheduling.active_from = node.attribute("ACTIVE_FROM").map(|s| s.to_string());
+        job.scheduling.active_till = node.attribute("ACTIVE_TILL").map(|s| s.to_string());
+        job.scheduling.due_out = node.attribute("DUE_OUT").map(|s| s.to_string());
+        job.scheduling.due_out_daysoffset = node.attribute("DUE_OUT_DAYSOFFSET").map(|s| s.to_string());
+        job.scheduling.from_daysoffset = node.attribute("FROM_DAYSOFFSET").map(|s| s.to_string());
+        job.scheduling.to_daysoffset = node.attribute("TO_DAYSOFFSET").map(|s| s.to_string());
+        job.scheduling.prev_day = node.attribute("PREV_DAY").map(|s| s.to_string());
+        job.scheduling.adjust_cond = node.attribute("ADJUST_COND").map(|s| s.to_string());
     }
     
     /// Parses child elements of a job node
@@ -369,6 +529,20 @@ impl ControlMXmlParser {
         }
         
         job.on_conditions.push(on_cond);
+    }
+    
+    /// Helper method to parse integer attributes
+    ///
+    /// # Arguments
+    ///
+    /// * `node` - XML node containing the attribute
+    /// * `attr_name` - Name of the attribute to parse
+    ///
+    /// # Returns
+    ///
+    /// Option containing the parsed integer or None if parsing fails
+    fn get_int_attr(&self, node: &roxmltree::Node, attr_name: &str) -> Option<i32> {
+        node.attribute(attr_name).and_then(|s| s.parse().ok())
     }
 }
 

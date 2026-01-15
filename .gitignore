@@ -30,3 +30,4 @@ target
 /README.md.backup
 /*.db
 /static/index.html.new
+.env

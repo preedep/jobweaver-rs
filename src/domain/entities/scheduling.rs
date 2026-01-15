@@ -35,6 +35,46 @@ pub struct SchedulingInfo {
     pub max_wait: Option<i32>,
     /// Maximum number of reruns on failure
     pub max_rerun: Option<i32>,
+    
+    // Additional scheduling attributes from Control-M XML
+    /// Shift
+    pub shift: Option<String>,
+    /// Shift number
+    pub shift_num: Option<String>,
+    /// Retroactive scheduling
+    pub retro: Option<String>,
+    /// Statistical calendar
+    pub stat_cal: Option<String>,
+    /// Date specification
+    pub date: Option<String>,
+    /// Days AND/OR logic
+    pub days_and_or: Option<String>,
+    /// Maximum days
+    pub maxdays: Option<i32>,
+    /// Maximum runs
+    pub maxruns: Option<i32>,
+    /// Auto archive
+    pub autoarch: Option<String>,
+    /// Confirmation required
+    pub confirm: Option<String>,
+    /// Timezone
+    pub timezone: Option<String>,
+    /// Active from date
+    pub active_from: Option<String>,
+    /// Active till date
+    pub active_till: Option<String>,
+    /// Due out time
+    pub due_out: Option<String>,
+    /// Due out days offset
+    pub due_out_daysoffset: Option<String>,
+    /// From days offset
+    pub from_daysoffset: Option<String>,
+    /// To days offset
+    pub to_daysoffset: Option<String>,
+    /// Previous day
+    pub prev_day: Option<String>,
+    /// Adjust condition
+    pub adjust_cond: Option<String>,
 }
 
 impl SchedulingInfo {
@@ -57,6 +97,25 @@ impl SchedulingInfo {
             cyclic_times: None,
             max_wait: None,
             max_rerun: None,
+            shift: None,
+            shift_num: None,
+            retro: None,
+            stat_cal: None,
+            date: None,
+            days_and_or: None,
+            maxdays: None,
+            maxruns: None,
+            autoarch: None,
+            confirm: None,
+            timezone: None,
+            active_from: None,
+            active_till: None,
+            due_out: None,
+            due_out_daysoffset: None,
+            from_daysoffset: None,
+            to_daysoffset: None,
+            prev_day: None,
+            adjust_cond: None,
         }
     }
 

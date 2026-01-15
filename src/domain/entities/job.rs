@@ -43,6 +43,175 @@ pub struct Job {
     /// Command line to execute
     pub cmdline: Option<String>,
     
+    // Additional job metadata from Control-M XML
+    /// Job ISN (Internal Sequence Number)
+    pub jobisn: Option<i32>,
+    /// Job group
+    pub group: Option<String>,
+    /// Member name
+    pub memname: Option<String>,
+    /// Author (different from created_by)
+    pub author: Option<String>,
+    /// Documentation library
+    pub doclib: Option<String>,
+    /// Documentation member
+    pub docmem: Option<String>,
+    /// Cyclic interval
+    pub interval: Option<String>,
+    /// Override path
+    pub override_path: Option<String>,
+    /// Override library
+    pub overlib: Option<String>,
+    /// Member library
+    pub memlib: Option<String>,
+    /// Confirmation required
+    pub confirm: Option<String>,
+    /// Retroactive scheduling
+    pub retro: Option<String>,
+    /// Maximum wait time
+    pub maxwait: Option<i32>,
+    /// Maximum reruns
+    pub maxrerun: Option<i32>,
+    /// Auto archive
+    pub autoarch: Option<String>,
+    /// Maximum days
+    pub maxdays: Option<i32>,
+    /// Maximum runs
+    pub maxruns: Option<i32>,
+    /// Days specification
+    pub days: Option<String>,
+    /// Weekdays specification
+    pub weekdays: Option<String>,
+    /// Monthly scheduling flags
+    pub jan: Option<String>,
+    pub feb: Option<String>,
+    pub mar: Option<String>,
+    pub apr: Option<String>,
+    pub may: Option<String>,
+    pub jun: Option<String>,
+    pub jul: Option<String>,
+    pub aug: Option<String>,
+    pub sep: Option<String>,
+    pub oct: Option<String>,
+    pub nov: Option<String>,
+    pub dec: Option<String>,
+    /// Date specification
+    pub date: Option<String>,
+    /// Rerun member
+    pub rerunmem: Option<String>,
+    /// Days AND/OR logic
+    pub days_and_or: Option<String>,
+    /// Category
+    pub category: Option<String>,
+    /// Shift
+    pub shift: Option<String>,
+    /// Shift number
+    pub shiftnum: Option<String>,
+    /// PDS name
+    pub pdsname: Option<String>,
+    /// Minimum value
+    pub minimum: Option<String>,
+    /// Prevent NCT2
+    pub preventnct2: Option<String>,
+    /// Option
+    pub option: Option<String>,
+    /// From value
+    pub from: Option<String>,
+    /// Parameter
+    pub par: Option<String>,
+    /// System database
+    pub sysdb: Option<String>,
+    /// Due out time
+    pub due_out: Option<String>,
+    /// Retention days
+    pub reten_days: Option<String>,
+    /// Retention generation
+    pub reten_gen: Option<String>,
+    /// Task class
+    pub task_class: Option<String>,
+    /// Previous day
+    pub prev_day: Option<String>,
+    /// Adjust condition
+    pub adjust_cond: Option<String>,
+    /// Jobs in group
+    pub jobs_in_group: Option<String>,
+    /// Large size flag
+    pub large_size: Option<String>,
+    /// Independent cyclic
+    pub ind_cyclic: Option<String>,
+    /// Creation user (different from created_by)
+    pub creation_user: Option<String>,
+    /// Creation time
+    pub creation_time: Option<String>,
+    /// Change time
+    pub change_time: Option<String>,
+    /// Job version
+    pub job_version: Option<String>,
+    /// Rule-based calendar relationship
+    pub rule_based_calendar_relationship: Option<String>,
+    /// Tag relationship
+    pub tag_relationship: Option<String>,
+    /// Timezone
+    pub timezone: Option<String>,
+    /// Application form
+    pub appl_form: Option<String>,
+    /// Control-M version
+    pub cm_ver: Option<String>,
+    /// Multi-agent
+    pub multy_agent: Option<String>,
+    /// Active from date
+    pub active_from: Option<String>,
+    /// Active till date
+    pub active_till: Option<String>,
+    /// Scheduling environment
+    pub scheduling_environment: Option<String>,
+    /// System affinity
+    pub system_affinity: Option<String>,
+    /// Request NJE node
+    pub request_nje_node: Option<String>,
+    /// Statistical calendar
+    pub stat_cal: Option<String>,
+    /// Instream JCL
+    pub instream_jcl: Option<String>,
+    /// Use instream JCL flag
+    pub use_instream_jcl: Option<String>,
+    /// Due out days offset
+    pub due_out_daysoffset: Option<String>,
+    /// From days offset
+    pub from_daysoffset: Option<String>,
+    /// To days offset
+    pub to_daysoffset: Option<String>,
+    /// Version opcode
+    pub version_opcode: Option<String>,
+    /// Is current version flag
+    pub is_current_version: Option<String>,
+    /// Version serial
+    pub version_serial: Option<i32>,
+    /// Version host
+    pub version_host: Option<String>,
+    /// Cyclic interval sequence
+    pub cyclic_interval_sequence: Option<String>,
+    /// Cyclic times sequence
+    pub cyclic_times_sequence: Option<String>,
+    /// Cyclic tolerance
+    pub cyclic_tolerance: Option<i32>,
+    /// Cyclic type
+    pub cyclic_type: Option<String>,
+    /// Parent folder name
+    pub parent_folder: Option<String>,
+    /// Parent table name
+    pub parent_table: Option<String>,
+    /// End folder
+    pub end_folder: Option<String>,
+    /// Order date
+    pub odate: Option<String>,
+    /// From procedures
+    pub fprocs: Option<String>,
+    /// To programs
+    pub tpgms: Option<String>,
+    /// To procedures
+    pub tprocs: Option<String>,
+    
     /// Scheduling configuration (time windows, calendars, etc.)
     pub scheduling: super::SchedulingInfo,
     
@@ -104,6 +273,95 @@ impl Job {
             cyclic: false,
             node_id: None,
             cmdline: None,
+            jobisn: None,
+            group: None,
+            memname: None,
+            author: None,
+            doclib: None,
+            docmem: None,
+            interval: None,
+            override_path: None,
+            overlib: None,
+            memlib: None,
+            confirm: None,
+            retro: None,
+            maxwait: None,
+            maxrerun: None,
+            autoarch: None,
+            maxdays: None,
+            maxruns: None,
+            days: None,
+            weekdays: None,
+            jan: None,
+            feb: None,
+            mar: None,
+            apr: None,
+            may: None,
+            jun: None,
+            jul: None,
+            aug: None,
+            sep: None,
+            oct: None,
+            nov: None,
+            dec: None,
+            date: None,
+            rerunmem: None,
+            days_and_or: None,
+            category: None,
+            shift: None,
+            shiftnum: None,
+            pdsname: None,
+            minimum: None,
+            preventnct2: None,
+            option: None,
+            from: None,
+            par: None,
+            sysdb: None,
+            due_out: None,
+            reten_days: None,
+            reten_gen: None,
+            task_class: None,
+            prev_day: None,
+            adjust_cond: None,
+            jobs_in_group: None,
+            large_size: None,
+            ind_cyclic: None,
+            creation_user: None,
+            creation_time: None,
+            change_time: None,
+            job_version: None,
+            rule_based_calendar_relationship: None,
+            tag_relationship: None,
+            timezone: None,
+            appl_form: None,
+            cm_ver: None,
+            multy_agent: None,
+            active_from: None,
+            active_till: None,
+            scheduling_environment: None,
+            system_affinity: None,
+            request_nje_node: None,
+            stat_cal: None,
+            instream_jcl: None,
+            use_instream_jcl: None,
+            due_out_daysoffset: None,
+            from_daysoffset: None,
+            to_daysoffset: None,
+            version_opcode: None,
+            is_current_version: None,
+            version_serial: None,
+            version_host: None,
+            cyclic_interval_sequence: None,
+            cyclic_times_sequence: None,
+            cyclic_tolerance: None,
+            cyclic_type: None,
+            parent_folder: None,
+            parent_table: None,
+            end_folder: None,
+            odate: None,
+            fprocs: None,
+            tpgms: None,
+            tprocs: None,
             scheduling: super::SchedulingInfo::default(),
             in_conditions: Vec::new(),
             out_conditions: Vec::new(),

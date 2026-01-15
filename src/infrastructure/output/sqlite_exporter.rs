@@ -133,7 +133,7 @@ impl SqliteExporter {
     fn create_schema(&self) -> Result<()> {
         self.conn.execute_batch(
             r#"
-            -- Folders table
+            -- Folders table with all Control-M attributes
             CREATE TABLE IF NOT EXISTS folders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 folder_name TEXT NOT NULL,
@@ -142,11 +142,27 @@ impl SqliteExporter {
                 application TEXT,
                 description TEXT,
                 owner TEXT,
+                version TEXT,
+                platform TEXT,
+                table_name TEXT,
+                folder_dsn TEXT,
+                table_dsn TEXT,
+                modified INTEGER,
+                last_upload TEXT,
+                folder_order_method TEXT,
+                table_userdaily TEXT,
+                real_folder_id INTEGER,
+                real_tableid INTEGER,
+                type_code INTEGER,
+                used_by TEXT,
+                used_by_code INTEGER,
+                enforce_validation TEXT,
+                site_standard_name TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(folder_name, datacenter)
             );
 
-            -- Jobs table
+            -- Jobs table with all Control-M attributes
             CREATE TABLE IF NOT EXISTS jobs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 job_name TEXT NOT NULL,
@@ -164,26 +180,127 @@ impl SqliteExporter {
                 cyclic INTEGER DEFAULT 0,
                 node_id TEXT,
                 cmdline TEXT,
+                jobisn INTEGER,
+                job_group TEXT,
+                memname TEXT,
+                author TEXT,
+                doclib TEXT,
+                docmem TEXT,
+                job_interval TEXT,
+                override_path TEXT,
+                overlib TEXT,
+                memlib TEXT,
+                confirm TEXT,
+                retro TEXT,
+                maxwait INTEGER,
+                maxrerun INTEGER,
+                autoarch TEXT,
+                maxdays INTEGER,
+                maxruns INTEGER,
+                days TEXT,
+                weekdays TEXT,
+                jan TEXT, feb TEXT, mar TEXT, apr TEXT, may TEXT, jun TEXT,
+                jul TEXT, aug TEXT, sep TEXT, oct TEXT, nov TEXT, dec TEXT,
+                date TEXT,
+                rerunmem TEXT,
+                days_and_or TEXT,
+                category TEXT,
+                shift TEXT,
+                shiftnum TEXT,
+                pdsname TEXT,
+                minimum TEXT,
+                preventnct2 TEXT,
+                option_field TEXT,
+                from_field TEXT,
+                par TEXT,
+                sysdb TEXT,
+                due_out TEXT,
+                reten_days TEXT,
+                reten_gen TEXT,
+                task_class TEXT,
+                prev_day TEXT,
+                adjust_cond TEXT,
+                jobs_in_group TEXT,
+                large_size TEXT,
+                ind_cyclic TEXT,
+                creation_user TEXT,
+                creation_time TEXT,
                 created_by TEXT,
                 creation_date TEXT,
                 change_userid TEXT,
                 change_date TEXT,
+                change_time TEXT,
+                job_version TEXT,
+                version_opcode TEXT,
+                is_current_version TEXT,
+                version_serial INTEGER,
+                version_host TEXT,
+                rule_based_calendar_relationship TEXT,
+                tag_relationship TEXT,
+                timezone TEXT,
+                appl_form TEXT,
+                cm_ver TEXT,
+                multy_agent TEXT,
+                active_from TEXT,
+                active_till TEXT,
+                scheduling_environment TEXT,
+                system_affinity TEXT,
+                request_nje_node TEXT,
+                stat_cal TEXT,
+                instream_jcl TEXT,
+                use_instream_jcl TEXT,
+                due_out_daysoffset TEXT,
+                from_daysoffset TEXT,
+                to_daysoffset TEXT,
+                cyclic_interval_sequence TEXT,
+                cyclic_times_sequence TEXT,
+                cyclic_tolerance INTEGER,
+                cyclic_type TEXT,
+                parent_folder TEXT,
+                parent_table TEXT,
+                end_folder TEXT,
+                odate TEXT,
+                fprocs TEXT,
+                tpgms TEXT,
+                tprocs TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(job_name, folder_name)
             );
 
-            -- Job scheduling table
+            -- Job scheduling table with all scheduling attributes
             CREATE TABLE IF NOT EXISTS job_scheduling (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 job_id INTEGER NOT NULL,
                 time_from TEXT,
                 time_to TEXT,
+                days TEXT,
+                weekdays TEXT,
                 days_calendar TEXT,
                 weeks_calendar TEXT,
                 conf_calendar TEXT,
-                interval TEXT,
-                max_wait TEXT,
-                max_rerun TEXT,
+                stat_cal TEXT,
+                cyclic_interval TEXT,
+                cyclic_times TEXT,
+                max_wait INTEGER,
+                max_rerun INTEGER,
+                maxdays INTEGER,
+                maxruns INTEGER,
+                date TEXT,
+                days_and_or TEXT,
+                shift TEXT,
+                shift_num TEXT,
+                retro TEXT,
+                autoarch TEXT,
+                confirm TEXT,
+                timezone TEXT,
+                active_from TEXT,
+                active_till TEXT,
+                due_out TEXT,
+                due_out_daysoffset TEXT,
+                from_daysoffset TEXT,
+                to_daysoffset TEXT,
+                prev_day TEXT,
+                adjust_cond TEXT,
                 FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
             );
 
@@ -277,7 +394,13 @@ impl SqliteExporter {
 
             -- Create indexes for better query performance
             
-            -- Single column indexes for exact match searches
+            -- Folder indexes
+            CREATE INDEX IF NOT EXISTS idx_folders_datacenter ON folders(datacenter);
+            CREATE INDEX IF NOT EXISTS idx_folders_application ON folders(application);
+            CREATE INDEX IF NOT EXISTS idx_folders_type ON folders(folder_type);
+            CREATE INDEX IF NOT EXISTS idx_folders_order_method ON folders(folder_order_method);
+            
+            -- Job indexes - Single column
             CREATE INDEX IF NOT EXISTS idx_jobs_folder ON jobs(folder_name);
             CREATE INDEX IF NOT EXISTS idx_jobs_application ON jobs(application);
             CREATE INDEX IF NOT EXISTS idx_jobs_critical ON jobs(critical);
@@ -285,13 +408,20 @@ impl SqliteExporter {
             CREATE INDEX IF NOT EXISTS idx_jobs_appl_ver ON jobs(appl_ver);
             CREATE INDEX IF NOT EXISTS idx_jobs_task_type ON jobs(task_type);
             CREATE INDEX IF NOT EXISTS idx_jobs_owner ON jobs(owner);
+            CREATE INDEX IF NOT EXISTS idx_jobs_jobisn ON jobs(jobisn);
+            CREATE INDEX IF NOT EXISTS idx_jobs_group ON jobs(job_group);
+            CREATE INDEX IF NOT EXISTS idx_jobs_timezone ON jobs(timezone);
+            CREATE INDEX IF NOT EXISTS idx_jobs_parent_folder ON jobs(parent_folder);
+            CREATE INDEX IF NOT EXISTS idx_jobs_parent_table ON jobs(parent_table);
+            CREATE INDEX IF NOT EXISTS idx_jobs_scheduling_env ON jobs(scheduling_environment);
             
-            -- Composite indexes for common filter combinations
+            -- Job indexes - Composite
             CREATE INDEX IF NOT EXISTS idx_jobs_app_type ON jobs(application, appl_type);
             CREATE INDEX IF NOT EXISTS idx_jobs_folder_app ON jobs(folder_name, application);
             CREATE INDEX IF NOT EXISTS idx_jobs_critical_app ON jobs(critical, application);
+            CREATE INDEX IF NOT EXISTS idx_jobs_group_folder ON jobs(job_group, folder_name);
             
-            -- Full-text search support for job_name (using trigram for LIKE queries)
+            -- Job name search
             CREATE INDEX IF NOT EXISTS idx_jobs_name ON jobs(job_name);
             
             -- Foreign key indexes for all child tables
@@ -366,8 +496,13 @@ impl SqliteExporter {
         tx.execute(
             r#"
             INSERT OR REPLACE INTO folders 
-            (folder_name, folder_type, datacenter, application, description, owner)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            (folder_name, folder_type, datacenter, application, description, owner,
+             version, platform, table_name, folder_dsn, table_dsn, modified,
+             last_upload, folder_order_method, table_userdaily, real_folder_id,
+             real_tableid, type_code, used_by, used_by_code, enforce_validation,
+             site_standard_name)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+                    ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
             "#,
             params![
                 &folder.folder_name,
@@ -376,6 +511,22 @@ impl SqliteExporter {
                 &folder.application,
                 &folder.description,
                 &folder.owner,
+                &folder.version,
+                &folder.platform,
+                &folder.table_name,
+                &folder.folder_dsn,
+                &folder.table_dsn,
+                folder.modified.map(|b| if b { 1 } else { 0 }),
+                &folder.last_upload,
+                &folder.folder_order_method,
+                &folder.table_userdaily,
+                &folder.real_folder_id,
+                &folder.real_tableid,
+                &folder.type_code,
+                &folder.used_by,
+                &folder.used_by_code,
+                &folder.enforce_validation,
+                &folder.site_standard_name,
             ],
         ).context("Failed to insert folder")?;
 
@@ -416,33 +567,66 @@ impl SqliteExporter {
         tx.prepare_cached(
             r#"
             INSERT OR REPLACE INTO jobs (
-                job_name, folder_name, application, sub_application,
-                appl_type, appl_ver,
+                job_name, folder_name, application, sub_application, appl_type, appl_ver,
                 description, owner, run_as, priority, critical, task_type, cyclic,
-                node_id, cmdline, created_by, creation_date, change_userid, change_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                node_id, cmdline, jobisn, job_group, memname, author, doclib, docmem,
+                job_interval, override_path, overlib, memlib, confirm, retro, maxwait,
+                maxrerun, autoarch, maxdays, maxruns, days, weekdays, jan, feb, mar,
+                apr, may, jun, jul, aug, sep, oct, nov, dec, date, rerunmem,
+                days_and_or, category, shift, shiftnum, pdsname, minimum, preventnct2,
+                option_field, from_field, par, sysdb, due_out, reten_days, reten_gen,
+                task_class, prev_day, adjust_cond, jobs_in_group, large_size, ind_cyclic,
+                creation_user, creation_time, created_by, creation_date, change_userid,
+                change_date, change_time, job_version, version_opcode, is_current_version,
+                version_serial, version_host, rule_based_calendar_relationship,
+                tag_relationship, timezone, appl_form, cm_ver, multy_agent, active_from,
+                active_till, scheduling_environment, system_affinity, request_nje_node,
+                stat_cal, instream_jcl, use_instream_jcl, due_out_daysoffset,
+                from_daysoffset, to_daysoffset, cyclic_interval_sequence,
+                cyclic_times_sequence, cyclic_tolerance, cyclic_type, parent_folder,
+                parent_table, end_folder, odate, fprocs, tpgms, tprocs
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+                ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
+                ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41,
+                ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54,
+                ?55, ?56, ?57, ?58, ?59, ?60, ?61, ?62, ?63, ?64, ?65, ?66, ?67,
+                ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80,
+                ?81, ?82, ?83, ?84, ?85, ?86, ?87, ?88, ?89, ?90, ?91, ?92, ?93,
+                ?94, ?95, ?96, ?97, ?98, ?99, ?100, ?101, ?102, ?103, ?104, ?105,
+                ?106, ?107, ?108, ?109, ?110, ?111, ?112, ?113, ?114, ?115, ?116,
+                ?117, ?118, ?119, ?120
+            )
             "#,
         )?
         .execute(params![
-            &job.job_name,
-            &job.folder_name,
-            &job.application,
-            &job.sub_application,
-            &job.appl_type,
-            &job.appl_ver,
-            &job.description,
-            &job.owner,
-            &job.run_as,
-            &job.priority,
-            if job.critical { 1 } else { 0 },
-            &job.task_type,
-            if job.cyclic { 1 } else { 0 },
-            &job.node_id,
-            &job.cmdline,
-            &job.created_by,
-            &job.creation_date,
-            &job.change_userid,
-            &job.change_date,
+            &job.job_name, &job.folder_name, &job.application, &job.sub_application,
+            &job.appl_type, &job.appl_ver, &job.description, &job.owner, &job.run_as,
+            &job.priority, if job.critical { 1 } else { 0 }, &job.task_type,
+            if job.cyclic { 1 } else { 0 }, &job.node_id, &job.cmdline, &job.jobisn,
+            &job.group, &job.memname, &job.author, &job.doclib, &job.docmem,
+            &job.interval, &job.override_path, &job.overlib, &job.memlib, &job.confirm,
+            &job.retro, &job.maxwait, &job.maxrerun, &job.autoarch, &job.maxdays,
+            &job.maxruns, &job.days, &job.weekdays, &job.jan, &job.feb, &job.mar,
+            &job.apr, &job.may, &job.jun, &job.jul, &job.aug, &job.sep, &job.oct,
+            &job.nov, &job.dec, &job.date, &job.rerunmem, &job.days_and_or,
+            &job.category, &job.shift, &job.shiftnum, &job.pdsname, &job.minimum,
+            &job.preventnct2, &job.option, &job.from, &job.par, &job.sysdb,
+            &job.due_out, &job.reten_days, &job.reten_gen, &job.task_class,
+            &job.prev_day, &job.adjust_cond, &job.jobs_in_group, &job.large_size,
+            &job.ind_cyclic, &job.creation_user, &job.creation_time, &job.created_by,
+            &job.creation_date, &job.change_userid, &job.change_date, &job.change_time,
+            &job.job_version, &job.version_opcode, &job.is_current_version,
+            &job.version_serial, &job.version_host, &job.rule_based_calendar_relationship,
+            &job.tag_relationship, &job.timezone, &job.appl_form, &job.cm_ver,
+            &job.multy_agent, &job.active_from, &job.active_till,
+            &job.scheduling_environment, &job.system_affinity, &job.request_nje_node,
+            &job.stat_cal, &job.instream_jcl, &job.use_instream_jcl,
+            &job.due_out_daysoffset, &job.from_daysoffset, &job.to_daysoffset,
+            &job.cyclic_interval_sequence, &job.cyclic_times_sequence,
+            &job.cyclic_tolerance, &job.cyclic_type, &job.parent_folder,
+            &job.parent_table, &job.end_folder, &job.odate, &job.fprocs, &job.tpgms,
+            &job.tprocs,
         ])?;
 
         let job_id = tx.last_insert_rowid();
@@ -475,16 +659,47 @@ impl SqliteExporter {
         tx.execute(
             r#"
             INSERT INTO job_scheduling 
-            (job_id, time_from, time_to, days_calendar, weeks_calendar, conf_calendar)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            (job_id, time_from, time_to, days, weekdays, days_calendar, weeks_calendar,
+             conf_calendar, stat_cal, cyclic_interval, cyclic_times, max_wait, max_rerun,
+             maxdays, maxruns, date, days_and_or, shift, shift_num, retro, autoarch,
+             confirm, timezone, active_from, active_till, due_out, due_out_daysoffset,
+             from_daysoffset, to_daysoffset, prev_day, adjust_cond)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+                    ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
+                    ?29, ?30, ?31)
             "#,
             params![
                 job_id,
                 &scheduling.time_from,
                 &scheduling.time_to,
+                &scheduling.days,
+                &scheduling.weekdays,
                 &scheduling.days_calendar,
                 &scheduling.weeks_calendar,
                 &scheduling.conf_calendar,
+                &scheduling.stat_cal,
+                &scheduling.cyclic_interval,
+                &scheduling.cyclic_times,
+                &scheduling.max_wait,
+                &scheduling.max_rerun,
+                &scheduling.maxdays,
+                &scheduling.maxruns,
+                &scheduling.date,
+                &scheduling.days_and_or,
+                &scheduling.shift,
+                &scheduling.shift_num,
+                &scheduling.retro,
+                &scheduling.autoarch,
+                &scheduling.confirm,
+                &scheduling.timezone,
+                &scheduling.active_from,
+                &scheduling.active_till,
+                &scheduling.due_out,
+                &scheduling.due_out_daysoffset,
+                &scheduling.from_daysoffset,
+                &scheduling.to_daysoffset,
+                &scheduling.prev_day,
+                &scheduling.adjust_cond,
             ],
         ).context("Failed to insert job scheduling")?;
 
