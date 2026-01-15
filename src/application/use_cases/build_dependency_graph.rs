@@ -1,17 +1,41 @@
+//! Build Dependency Graph use case module
+//!
+//! This module provides the use case for building and analyzing job dependency graphs.
+//! It orchestrates the dependency analyzer service to create graph structures.
+
 use crate::domain::entities::Job;
 use crate::application::services::DependencyAnalyzer;
 
+/// Use case for building job dependency graphs
+///
+/// This use case encapsulates the business logic for constructing dependency
+/// graphs from job collections and analyzing their properties.
 pub struct BuildDependencyGraph {
+    /// The dependency analyzer service
     analyzer: DependencyAnalyzer,
 }
 
 impl BuildDependencyGraph {
+    /// Creates a new BuildDependencyGraph use case
+    ///
+    /// # Returns
+    ///
+    /// A new BuildDependencyGraph instance with an initialized analyzer
     pub fn new() -> Self {
         Self {
             analyzer: DependencyAnalyzer::new(),
         }
     }
 
+    /// Executes dependency graph building for a collection of jobs
+    ///
+    /// # Arguments
+    ///
+    /// * `jobs` - Slice of job references to build the graph from
+    ///
+    /// # Returns
+    ///
+    /// A DependencyGraphResult containing graph analysis results
     pub fn execute(&mut self, jobs: &[&Job]) -> DependencyGraphResult {
         self.analyzer.build_graph(jobs);
 
@@ -29,6 +53,11 @@ impl BuildDependencyGraph {
         }
     }
 
+    /// Gets a reference to the internal dependency analyzer
+    ///
+    /// # Returns
+    ///
+    /// Reference to the DependencyAnalyzer
     pub fn get_analyzer(&self) -> &DependencyAnalyzer {
         &self.analyzer
     }
@@ -40,10 +69,17 @@ impl Default for BuildDependencyGraph {
     }
 }
 
+/// Result of dependency graph building
+///
+/// Contains information about the constructed graph including
+/// total jobs, circular dependency detection, and topological ordering.
 #[derive(Debug)]
 pub struct DependencyGraphResult {
+    /// Total number of jobs in the graph
     pub total_jobs: usize,
+    /// Whether circular dependencies were detected
     pub has_circular_dependencies: bool,
+    /// Topological order of jobs (None if circular dependencies exist)
     pub topological_order: Option<Vec<String>>,
 }
 

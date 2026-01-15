@@ -1,3 +1,8 @@
+//! HTTP request handlers module
+//!
+//! This module contains all HTTP request handlers for the web API,
+//! including authentication, job search, dashboard stats, and data export.
+
 use actix_web::{web, HttpResponse, HttpRequest, HttpMessage, Responder};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use std::sync::{Arc, Mutex};
@@ -8,10 +13,30 @@ use crate::web::models::*;
 use crate::web::repository::JobRepository;
 use crate::web::config::WebConfig;
 
+/// Health check endpoint
+///
+/// Returns OK status to indicate the server is running.
+///
+/// # Returns
+///
+/// HTTP 200 with success response
 pub async fn health_check() -> HttpResponse {
     HttpResponse::Ok().json(ApiResponse::success("OK"))
 }
 
+/// Handles user login with username and password
+///
+/// Validates credentials and generates a JWT token on success.
+///
+/// # Arguments
+///
+/// * `request` - Login request with username and password
+/// * `config` - Web configuration containing JWT secret
+/// * `user_store` - User store for credential verification
+///
+/// # Returns
+///
+/// HTTP 200 with token on success, HTTP 401 on invalid credentials
 pub async fn login(
     request: web::Json<LoginRequest>,
     config: web::Data<WebConfig>,
@@ -43,6 +68,18 @@ pub async fn login(
     }
 }
 
+/// Handles Entra ID (Azure AD) authentication callback
+///
+/// Processes the OAuth callback and generates a JWT token.
+///
+/// # Arguments
+///
+/// * `request` - Entra ID authentication request with authorization code
+/// * `config` - Web configuration
+///
+/// # Returns
+///
+/// HTTP 200 with token on success, HTTP 400 if Entra ID is disabled
 pub async fn entra_id_callback(
     request: web::Json<EntraIdAuthRequest>,
     config: web::Data<WebConfig>,
@@ -71,6 +108,17 @@ pub async fn entra_id_callback(
     }
 }
 
+/// Gets the currently authenticated user's information
+///
+/// Extracts user info from JWT claims in the request.
+///
+/// # Arguments
+///
+/// * `req` - HTTP request with JWT claims in extensions
+///
+/// # Returns
+///
+/// HTTP 200 with user info on success, HTTP 401 if not authenticated
 pub async fn get_current_user(
     req: HttpRequest,
 ) -> HttpResponse {
@@ -88,6 +136,19 @@ pub async fn get_current_user(
     }
 }
 
+/// Searches for jobs with filtering, sorting, and pagination
+///
+/// Supports filtering by various job attributes, sorting, and pagination.
+///
+/// # Arguments
+///
+/// * `query` - Search request with filters and pagination parameters
+/// * `repository` - Job repository for database access
+/// * `_auth` - Bearer token authentication (validates user is authenticated)
+///
+/// # Returns
+///
+/// HTTP 200 with search results on success, HTTP 500 on error
 pub async fn search_jobs(
     query: web::Json<JobSearchRequest>,
     repository: web::Data<Arc<JobRepository>>,
@@ -120,6 +181,19 @@ pub async fn search_jobs(
     }
 }
 
+/// Gets detailed information for a specific job
+///
+/// Returns complete job information including conditions and variables.
+///
+/// # Arguments
+///
+/// * `job_id` - Job ID from URL path
+/// * `repository` - Job repository for database access
+/// * `_auth` - Bearer token authentication
+///
+/// # Returns
+///
+/// HTTP 200 with job details, HTTP 404 if not found, HTTP 500 on error
 pub async fn get_job_detail(
     job_id: web::Path<i64>,
     repository: web::Data<Arc<JobRepository>>,
@@ -136,6 +210,18 @@ pub async fn get_job_detail(
     }
 }
 
+/// Gets dashboard statistics
+///
+/// Returns aggregated statistics for the dashboard view.
+///
+/// # Arguments
+///
+/// * `repository` - Job repository for database access
+/// * `_auth` - Bearer token authentication
+///
+/// # Returns
+///
+/// HTTP 200 with statistics on success, HTTP 500 on error
 pub async fn get_dashboard_stats(
     repository: web::Data<Arc<JobRepository>>,
     _auth: BearerAuth,
@@ -148,6 +234,18 @@ pub async fn get_dashboard_stats(
     }
 }
 
+/// Gets available filter options for job search
+///
+/// Returns lists of unique values for filterable fields.
+///
+/// # Arguments
+///
+/// * `repository` - Job repository for database access
+/// * `_auth` - Bearer token authentication
+///
+/// # Returns
+///
+/// HTTP 200 with filter options on success, HTTP 500 on error
 pub async fn get_filter_options(
     repository: web::Data<Arc<JobRepository>>,
     _auth: BearerAuth,
@@ -160,6 +258,19 @@ pub async fn get_filter_options(
     }
 }
 
+/// Exports job search results to CSV format
+///
+/// Generates a CSV file with filtered job data.
+///
+/// # Arguments
+///
+/// * `query` - Search filters from query parameters
+/// * `repository` - Job repository for database access
+/// * `_auth` - Bearer token authentication
+///
+/// # Returns
+///
+/// HTTP 200 with CSV file on success, HTTP 500 on error
 pub async fn export_jobs_csv(
     query: web::Query<JobSearchRequest>,
     repository: web::Data<Arc<JobRepository>>,
@@ -176,6 +287,18 @@ pub async fn export_jobs_csv(
     }
 }
 
+/// Gets dependency graph data for a specific job
+///
+/// Returns nodes and edges for visualizing job dependencies.
+///
+/// # Arguments
+///
+/// * `repo` - Job repository for database access
+/// * `path` - Job ID from URL path
+///
+/// # Returns
+///
+/// HTTP 200 with graph data on success, HTTP 500 on error
 pub async fn get_job_graph(
     repo: web::Data<Arc<JobRepository>>,
     path: web::Path<i64>,

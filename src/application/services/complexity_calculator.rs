@@ -1,14 +1,42 @@
+//! Complexity Calculator service module
+//!
+//! This service provides functionality to calculate complexity scores,
+//! migration difficulty, and migration priority for jobs.
+
 use crate::domain::entities::Job;
 use crate::domain::value_objects::{ComplexityScore, MigrationDifficulty, MigrationPriority};
 
+/// Service for calculating job complexity metrics
+///
+/// The ComplexityCalculator analyzes various aspects of a job to determine
+/// its complexity score, migration difficulty, and migration priority.
 pub struct ComplexityCalculator;
 
 impl ComplexityCalculator {
+    /// Creates a new ComplexityCalculator instance
+    ///
+    /// # Returns
+    ///
+    /// A new ComplexityCalculator
     pub fn new() -> Self {
         Self
     }
 
+    /// Calculates the complexity score for a job
+    ///
+    /// This method analyzes all aspects of a job including dependencies,
+    /// conditions, resources, variables, and scheduling to produce a
+    /// comprehensive complexity score.
+    ///
+    /// # Arguments
+    ///
+    /// * `job` - The job to analyze
+    ///
+    /// # Returns
+    ///
+    /// A ComplexityScore representing the job's overall complexity
     pub fn calculate_job_complexity(&self, job: &Job) -> ComplexityScore {
+        // Gather all complexity metrics from the job
         let dependency_count = job.dependency_count();
         let dependency_depth = self.estimate_dependency_depth(job);
         let in_conditions = job.in_conditions.len();
@@ -39,11 +67,36 @@ impl ComplexityCalculator {
         )
     }
 
+    /// Calculates the migration difficulty for a job
+    ///
+    /// Migration difficulty is derived from the complexity score and
+    /// categorizes jobs into Easy, Medium, or Hard difficulty levels.
+    ///
+    /// # Arguments
+    ///
+    /// * `job` - The job to analyze
+    ///
+    /// # Returns
+    ///
+    /// A MigrationDifficulty level (Easy, Medium, or Hard)
     pub fn calculate_migration_difficulty(&self, job: &Job) -> MigrationDifficulty {
         let complexity = self.calculate_job_complexity(job);
         MigrationDifficulty::from_complexity_score(complexity)
     }
 
+    /// Calculates the migration priority for a job
+    ///
+    /// Priority is based on complexity (easier jobs get higher priority),
+    /// criticality (critical jobs get bonus priority), and dependencies
+    /// (fewer dependencies means higher priority).
+    ///
+    /// # Arguments
+    ///
+    /// * `job` - The job to analyze
+    ///
+    /// # Returns
+    ///
+    /// A MigrationPriority value (higher means more urgent to migrate)
     pub fn calculate_migration_priority(&self, job: &Job) -> MigrationPriority {
         let complexity = self.calculate_job_complexity(job);
         let is_critical = job.is_critical();
@@ -52,6 +105,18 @@ impl ComplexityCalculator {
         MigrationPriority::calculate(complexity, is_critical, dependency_count)
     }
 
+    /// Estimates the dependency depth for a job
+    ///
+    /// This is a simplified estimation. A more accurate calculation would
+    /// require analyzing the full dependency graph.
+    ///
+    /// # Arguments
+    ///
+    /// * `job` - The job to analyze
+    ///
+    /// # Returns
+    ///
+    /// Estimated dependency depth (0 if no dependencies, 1 if has dependencies)
     fn estimate_dependency_depth(&self, job: &Job) -> usize {
         if job.in_conditions.is_empty() && job.control_resources.is_empty() {
             0

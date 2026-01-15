@@ -1,19 +1,57 @@
-// API Configuration
+/**
+ * JobWeaver Web Application
+ * 
+ * Main JavaScript application for the JobWeaver Control-M job analysis tool.
+ * Provides a single-page application with authentication, job search, filtering,
+ * dashboard statistics, and dependency graph visualization.
+ */
+
+// ============================================================================
+// CONFIGURATION AND STATE
+// ============================================================================
+
+/** Base URL for API endpoints */
 const API_BASE = '/api';
+
+/** JWT authentication token */
 let authToken = null;
+
+/** Currently authenticated user information */
 let currentUser = null;
+
+/** Current page number for pagination */
 let currentPage = 1;
+
+/** Number of items to display per page */
 let currentPerPage = 50;
+
+/** Current sort configuration */
 let currentSort = { by: 'job_name', order: 'asc' };
+
+/** Current active filters for job search */
 let currentFilters = {};
 
-// Initialize App
+// ============================================================================
+// APPLICATION INITIALIZATION
+// ============================================================================
+
+/**
+ * Initialize the application when DOM is ready
+ * Sets up authentication check and event listeners
+ */
 document.addEventListener('DOMContentLoaded', () => {
     checkAuth();
     initializeEventListeners();
 });
 
-// Authentication
+// ============================================================================
+// AUTHENTICATION
+// ============================================================================
+
+/**
+ * Checks if user is authenticated
+ * Retrieves token from localStorage and validates with server
+ */
 function checkAuth() {
     authToken = localStorage.getItem('authToken');
     if (authToken) {
@@ -23,6 +61,10 @@ function checkAuth() {
     }
 }
 
+/**
+ * Fetches current user information from the server
+ * Uses stored JWT token for authentication
+ */
 async function fetchCurrentUser() {
     try {
         const response = await fetch(`${API_BASE}/auth/me`, {
@@ -49,6 +91,11 @@ async function fetchCurrentUser() {
     }
 }
 
+/**
+ * Shows a specific page and hides others
+ * 
+ * @param {string} pageId - ID of the page element to show
+ */
 function showPage(pageId) {
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
@@ -59,7 +106,14 @@ function showPage(pageId) {
     }
 }
 
-// Event Listeners
+// ============================================================================
+// EVENT LISTENERS INITIALIZATION
+// ============================================================================
+
+/**
+ * Initializes all event listeners for the application
+ * Sets up login, navigation, search, table, and modal listeners
+ */
 function initializeEventListeners() {
     initializeLoginListeners();
     initializeNavigationListeners();
@@ -68,6 +122,10 @@ function initializeEventListeners() {
     initializeModalListeners();
 }
 
+/**
+ * Initializes login-related event listeners
+ * Sets up tabs, form submission, Entra ID login, and logout
+ */
 function initializeLoginListeners() {
     initializeLoginTabs();
     initializeLoginForm();
@@ -75,6 +133,10 @@ function initializeLoginListeners() {
     initializeLogout();
 }
 
+/**
+ * Initializes login tab switching functionality
+ * Allows switching between local and Entra ID authentication
+ */
 function initializeLoginTabs() {
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -87,6 +149,10 @@ function initializeLoginTabs() {
     });
 }
 
+/**
+ * Initializes the login form event handlers
+ * Handles form submission and Enter key press
+ */
 function initializeLoginForm() {
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
@@ -107,6 +173,9 @@ function initializeLoginForm() {
     }
 }
 
+/**
+ * Initializes Entra ID (Azure AD) login button
+ */
 function initializeEntraLogin() {
     const entraLoginBtn = document.getElementById('entra-login-btn');
     if (entraLoginBtn) {
@@ -114,6 +183,9 @@ function initializeEntraLogin() {
     }
 }
 
+/**
+ * Initializes logout button event handler
+ */
 function initializeLogout() {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
@@ -121,6 +193,10 @@ function initializeLogout() {
     }
 }
 
+/**
+ * Initializes navigation menu event listeners
+ * Handles switching between dashboard and jobs pages
+ */
 function initializeNavigationListeners() {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => {
@@ -131,6 +207,10 @@ function initializeNavigationListeners() {
     });
 }
 
+/**
+ * Initializes search and filter control event listeners
+ * Sets up search, reset, export, and pagination controls
+ */
 function initializeSearchListeners() {
     const searchBtn = document.getElementById('search-btn');
     const resetBtn = document.getElementById('reset-btn');
@@ -148,6 +228,9 @@ function initializeSearchListeners() {
     }
 }
 
+/**
+ * Initializes table column header click listeners for sorting
+ */
 function initializeTableListeners() {
     document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
         th.addEventListener('click', () => {
@@ -156,6 +239,12 @@ function initializeTableListeners() {
     });
 }
 
+/**
+ * Handles table column sorting
+ * Toggles sort order if same column, otherwise sets to ascending
+ * 
+ * @param {string} sortBy - Column name to sort by
+ */
 function handleTableSort(sortBy) {
     if (currentSort.by === sortBy) {
         currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
@@ -166,6 +255,10 @@ function handleTableSort(sortBy) {
     performSearch();
 }
 
+/**
+ * Initializes modal dialog event listeners
+ * Sets up close buttons and click-outside-to-close functionality
+ */
 function initializeModalListeners() {
     document.querySelectorAll('.modal-close').forEach(btn => {
         btn.addEventListener('click', closeAllModals);
@@ -180,10 +273,20 @@ function initializeModalListeners() {
     });
 }
 
+/**
+ * Closes all open modal dialogs
+ */
 function closeAllModals() {
     document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
 }
 
+/**
+ * Handles user login form submission
+ * Validates credentials and stores JWT token on success
+ * 
+ * @param {Event} e - Form submit event
+ * @returns {Promise<boolean>} False to prevent default form submission
+ */
 async function handleLogin(e) {
     console.log('🔐 [LOGIN] ========== LOGIN FUNCTION CALLED ==========');
     console.log('[LOGIN] Event:', e);
@@ -271,6 +374,12 @@ async function handleLogin(e) {
     console.log('[LOGIN] ========== LOGIN FUNCTION END ==========');
     return false;
 }
+/**
+ * Handles Entra ID (Azure AD) login
+ * Currently shows a message that Entra ID is not configured
+ * 
+ * @returns {Promise<void>}
+ */
 async function handleEntraLogin() {
     const errorDiv = document.getElementById('login-error');
     
@@ -291,6 +400,10 @@ async function handleEntraLogin() {
     }
 }
 
+/**
+ * Logs out the current user
+ * Clears authentication state and returns to login page
+ */
 function logout() {
     authToken = null;
     currentUser = null;
@@ -298,6 +411,12 @@ function logout() {
     showPage('login-page');
 }
 
+/**
+ * Switches between content pages (dashboard and jobs)
+ * Updates navigation state and loads page-specific data
+ * 
+ * @param {string} page - Page identifier ('dashboard' or 'jobs')
+ */
 function switchContentPage(page) {
     console.log(`🔄 [NAV] Switching to ${page} page`);
     
@@ -322,7 +441,16 @@ function switchContentPage(page) {
     }
 }
 
-// Dashboard
+// ============================================================================
+// DASHBOARD
+// ============================================================================
+
+/**
+ * Loads and displays dashboard statistics
+ * Fetches aggregated data and renders charts
+ * 
+ * @returns {Promise<void>}
+ */
 async function loadDashboard() {
     const startTime = performance.now();
     console.log('📊 [DASHBOARD] Loading dashboard statistics...');
@@ -387,6 +515,14 @@ async function loadDashboard() {
     }
 }
 
+/**
+ * Renders a horizontal bar chart
+ * 
+ * @param {string} containerId - ID of the container element
+ * @param {Array} data - Array of data objects
+ * @param {string} labelKey - Key for label values
+ * @param {string} valueKey - Key for numeric values
+ */
 function renderBarChart(containerId, data, labelKey, valueKey) {
     const container = document.getElementById(containerId);
     if (!data || data.length === 0) {
@@ -410,6 +546,12 @@ function renderBarChart(containerId, data, labelKey, valueKey) {
     }).join('');
 }
 
+/**
+ * Renders a complexity distribution chart
+ * 
+ * @param {string} containerId - ID of the container element
+ * @param {Object} data - Object with low, medium, high counts
+ */
 function renderComplexityChart(containerId, data) {
     const container = document.getElementById(containerId);
     const total = data.low + data.medium + data.high;
@@ -439,7 +581,13 @@ function renderComplexityChart(containerId, data) {
     }).join('');
 }
 
-// Jobs Search
+// ============================================================================
+// JOBS SEARCH
+// ============================================================================
+
+/**
+ * Initializes Select2 dropdowns for enhanced filtering
+ */
 function initializeSelect2() {
     $('.select2-dropdown').select2({
         placeholder: 'Select an option',
@@ -448,6 +596,12 @@ function initializeSelect2() {
     });
 }
 
+/**
+ * Loads available filter options from the server
+ * Populates dropdown menus with unique values
+ * 
+ * @returns {Promise<void>}
+ */
 async function loadFilterOptions() {
     const startTime = performance.now();
     console.log('🔧 [FILTERS] Loading filter options...');
@@ -489,6 +643,12 @@ async function loadFilterOptions() {
     }
 }
 
+/**
+ * Populates a select dropdown with options
+ * 
+ * @param {string} selectId - ID of the select element
+ * @param {Array<string>} options - Array of option values
+ */
 function populateSelect(selectId, options) {
     const select = document.getElementById(selectId);
     const currentValue = select.value;
@@ -508,6 +668,11 @@ function populateSelect(selectId, options) {
     select.value = currentValue;
 }
 
+/**
+ * Collects current filter values from form inputs
+ * 
+ * @returns {Object} Object containing all filter values
+ */
 function collectFilterValues() {
     return {
         jobName: document.getElementById('filter-job-name')?.value?.trim(),
@@ -526,6 +691,13 @@ function collectFilterValues() {
     };
 }
 
+/**
+ * Builds a filters object for API request
+ * Converts form values to API-compatible format
+ * 
+ * @param {Object} values - Raw filter values from form
+ * @returns {Object} Formatted filters object
+ */
 function buildFiltersObject(values) {
     const filters = {};
     
@@ -546,6 +718,13 @@ function buildFiltersObject(values) {
     return filters;
 }
 
+/**
+ * Executes a job search API request
+ * 
+ * @param {Object} filters - Search filters
+ * @returns {Promise<Object>} Search results data
+ * @throws {Error} If search fails
+ */
 async function executeSearchRequest(filters) {
     const response = await fetch(`${API_BASE}/jobs/search`, {
         method: 'POST',
@@ -571,6 +750,10 @@ async function executeSearchRequest(filters) {
     return result.data;
 }
 
+/**
+ * Resets all search filters to default values
+ * Clears form inputs and performs a new search
+ */
 function resetFilters() {
     console.log('🔄 [SEARCH] Resetting all filters');
     document.getElementById('filter-job-name').value = '';
@@ -590,6 +773,12 @@ function resetFilters() {
     performSearch();
 }
 
+/**
+ * Performs a job search with current filters
+ * Fetches data from API and renders results table
+ * 
+ * @returns {Promise<void>}
+ */
 async function performSearch() {
     const startTime = performance.now();
     console.log('🔍 [SEARCH] Starting search operation...');
@@ -634,6 +823,11 @@ async function performSearch() {
     }
 }
 
+/**
+ * Shows or hides loading indicators
+ * 
+ * @param {boolean} show - Whether to show loading state
+ */
 function showLoading(show) {
     const loadingDiv = document.querySelector('.loading-state');
     const loadingSpinner = document.querySelector('.loading');
@@ -647,6 +841,15 @@ function showLoading(show) {
     
     console.log('[LOADING] Loading state:', show ? 'shown' : 'hidden');
 }
+/**
+ * Renders the jobs table with search results
+ * 
+ * @param {Object} data - Search results data
+ * @param {Array} data.jobs - Array of job objects
+ * @param {number} data.total - Total number of results
+ * @param {number} data.page - Current page number
+ * @param {number} data.per_page - Items per page
+ */
 function renderJobsTable(data) {
     console.log('[TABLE] Rendering jobs table with', data.jobs.length, 'jobs');
     const tbody = document.getElementById('jobs-table-body');
@@ -667,6 +870,11 @@ function renderJobsTable(data) {
     console.log('[TABLE] Table rendered successfully');
 }
 
+/**
+ * Updates the results information display
+ * 
+ * @param {Object} data - Search results data
+ */
 function updateResultsInfo(data) {
     const resultsInfo = document.getElementById('results-info');
     if (resultsInfo) {
@@ -691,6 +899,12 @@ function updatePageStats(total, filtered) {
     if (filteredStat) filteredStat.textContent = filtered.toLocaleString();
 }
 
+/**
+ * Renders a single job row for the table
+ * 
+ * @param {Object} job - Job data object
+ * @returns {string} HTML string for table row
+ */
 function renderJobRow(job) {
     const criticalBadge = job.critical 
         ? '<span class="badge badge-danger">Yes</span>' 
@@ -723,6 +937,11 @@ function renderJobRow(job) {
         </tr>
     `;
 }
+/**
+ * Renders pagination controls
+ * 
+ * @param {Object} data - Search results data with pagination info
+ */
 function renderPagination(data) {
     const pagination = document.getElementById('pagination');
     const totalPages = data.total_pages;
@@ -767,12 +986,26 @@ function renderPagination(data) {
     pagination.innerHTML = html;
 }
 
+/**
+ * Navigates to a specific page
+ * 
+ * @param {number} page - Page number to navigate to
+ */
 function goToPage(page) {
     currentPage = page;
     performSearch();
 }
 
-// Job Detail Modal
+// ============================================================================
+// JOB DETAIL MODAL
+// ============================================================================
+
+/**
+ * Displays detailed information for a job in a modal
+ * 
+ * @param {number} jobId - ID of the job to display
+ * @returns {Promise<void>}
+ */
 async function viewJobDetail(jobId) {
     const modal = document.getElementById('job-detail-modal');
     const modalBody = document.getElementById('modal-job-details');
@@ -800,6 +1033,15 @@ async function viewJobDetail(jobId) {
     }
 }
 
+/**
+ * Renders job detail information in the modal
+ * 
+ * @param {Object} data - Job detail data from API
+ * @param {Object} data.job - Job object
+ * @param {Array} data.in_conditions - Input conditions
+ * @param {Array} data.out_conditions - Output conditions
+ * @param {Array} data.variables - Job variables
+ */
 function renderJobDetail(data) {
     const job = data.job;
     const modalName = document.getElementById('modal-job-name');
@@ -893,14 +1135,30 @@ function renderJobDetail(data) {
     modalBody.innerHTML = html;
 }
 
-// Utility Functions
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Escapes HTML special characters to prevent XSS attacks
+ * 
+ * @param {string} text - Text to escape
+ * @returns {string} HTML-escaped text
+ */
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// Column Resize Functionality
+// ============================================================================
+// COLUMN RESIZE FUNCTIONALITY
+// ============================================================================
+
+/**
+ * Initializes column resize functionality for the jobs table
+ * Allows users to drag column borders to resize columns
+ */
 function initializeColumnResize() {
     const table = document.getElementById('jobs-table');
     if (!table) return;
@@ -964,10 +1222,21 @@ function initializeColumnResize() {
     });
 }
 
+// ============================================================================
+// CSV EXPORT FUNCTIONALITY
+// ============================================================================
+
+/**
+ * Exports current search results to CSV file
+ * Applies the same filters as the current search
+ * 
+ * @returns {Promise<void>}
+ */
 async function exportToCSV() {
     const startTime = performance.now();
     console.log('📥 [EXPORT] Starting CSV export...');
-    showLoading(true); console.log("[SEARCH] Starting search...");
+    showLoading(true);
+    console.log("[SEARCH] Starting search...");
     document.querySelector('#loading-overlay .loading-spinner p').textContent = 'Exporting to CSV...';
     
     const jobName = document.getElementById('filter-job-name').value;
