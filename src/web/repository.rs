@@ -1118,4 +1118,234 @@ impl JobRepository {
             edges,
         })
     }
+
+    pub fn get_end_to_end_graph(&self, job_id: i64, max_depth: Option<i32>) -> Result<super::models::JobGraphData> {
+        let depth_limit = max_depth.unwrap_or(5).min(10); // Default 5, max 10
+        tracing::info!("📊 [E2E-GRAPH] Fetching end-to-end dependency graph for job_id={}, depth={}", job_id, depth_limit);
+        
+        let conn = self.conn.lock().unwrap();
+        
+        // Get the main job info
+        let job = conn.query_row(
+            "SELECT id, job_name, folder_name, application, description FROM jobs WHERE id = ?",
+            [job_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?
+                ))
+            }
+        )?;
+        
+        tracing::info!("✅ [E2E-GRAPH] Found job: id={}, name='{}', folder='{}'", job.0, job.1, job.2);
+        
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        let mut visited_jobs = std::collections::HashSet::new();
+        let mut job_levels = std::collections::HashMap::new();
+        
+        // Add current job as node with level 0
+        nodes.push(super::models::GraphNode {
+            id: job.0,
+            label: job.1.clone(),
+            folder: job.2.clone(),
+            application: job.3.clone(),
+            description: job.4.clone(),
+            color: "#4CAF50".to_string(), // Green for current job
+            is_current: true,
+        });
+        visited_jobs.insert(job.0);
+        job_levels.insert(job.0, 0);
+        
+        // Traverse upstream (dependencies this job needs)
+        tracing::info!("🔼 [E2E-GRAPH] Traversing upstream dependencies...");
+        self.traverse_upstream(&conn, job.0, &job.1, 1, depth_limit, &mut nodes, &mut edges, &mut visited_jobs, &mut job_levels)?;
+        
+        // Traverse downstream (jobs that depend on this job)
+        tracing::info!("🔽 [E2E-GRAPH] Traversing downstream dependencies...");
+        self.traverse_downstream(&conn, job.0, &job.1, 1, depth_limit, &mut nodes, &mut edges, &mut visited_jobs, &mut job_levels)?;
+        
+        tracing::info!("✅ [E2E-GRAPH] Graph complete: {} nodes, {} edges, max depth reached: {}", 
+                      nodes.len(), edges.len(), job_levels.values().max().unwrap_or(&0));
+        
+        Ok(super::models::JobGraphData {
+            job_id: job.0,
+            job_name: job.1,
+            folder_name: job.2,
+            nodes,
+            edges,
+        })
+    }
+    
+    fn traverse_upstream(
+        &self,
+        conn: &rusqlite::Connection,
+        current_job_id: i64,
+        _current_job_name: &str,
+        current_level: i32,
+        max_depth: i32,
+        nodes: &mut Vec<super::models::GraphNode>,
+        edges: &mut Vec<super::models::GraphEdge>,
+        visited: &mut std::collections::HashSet<i64>,
+        levels: &mut std::collections::HashMap<i64, i32>,
+    ) -> Result<()> {
+        if current_level > max_depth {
+            tracing::debug!("[E2E-GRAPH] Reached max depth {} for upstream traversal", max_depth);
+            return Ok(());
+        }
+        
+        tracing::debug!("[E2E-GRAPH] Upstream level {}: Processing job_id={}", current_level, current_job_id);
+        
+        // Get in_conditions for current job
+        let in_query = "SELECT DISTINCT condition_name FROM in_conditions WHERE job_id = ?";
+        let mut in_stmt = conn.prepare(in_query)?;
+        let condition_names: Vec<String> = in_stmt
+            .query_map([current_job_id], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        tracing::debug!("[E2E-GRAPH] Found {} conditions for job_id={}", condition_names.len(), current_job_id);
+        
+        for cond_name in condition_names {
+            let base_name = cond_name
+                .trim_end_matches("-ENDED-OK")
+                .trim_end_matches("-ENDED-NOTOK")
+                .trim_end_matches("-ENDED")
+                .trim_end_matches("-OK")
+                .trim_end_matches("-NOTOK");
+            
+            if let Ok(dep_job) = conn.query_row(
+                "SELECT id, job_name, folder_name, application, description FROM jobs WHERE job_name = ? OR job_name = ? LIMIT 1",
+                [&cond_name, base_name],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?
+                    ))
+                }
+            ) {
+                if !visited.contains(&dep_job.0) {
+                    // Color based on level (upstream = blue shades)
+                    let color = match current_level {
+                        1 => "#2196F3".to_string(), // Blue
+                        2 => "#1976D2".to_string(), // Darker blue
+                        3 => "#1565C0".to_string(), // Even darker
+                        _ => "#0D47A1".to_string(), // Darkest blue
+                    };
+                    
+                    nodes.push(super::models::GraphNode {
+                        id: dep_job.0,
+                        label: dep_job.1.clone(),
+                        folder: dep_job.2.clone(),
+                        application: dep_job.3.clone(),
+                        description: dep_job.4.clone(),
+                        color,
+                        is_current: false,
+                    });
+                    visited.insert(dep_job.0);
+                    levels.insert(dep_job.0, -current_level); // Negative for upstream
+                    
+                    tracing::debug!("[E2E-GRAPH] Added upstream node at level {}: {}", current_level, dep_job.1);
+                    
+                    // Recursively traverse this job's dependencies
+                    self.traverse_upstream(conn, dep_job.0, &dep_job.1, current_level + 1, max_depth, nodes, edges, visited, levels)?;
+                }
+                
+                edges.push(super::models::GraphEdge {
+                    from: dep_job.0,
+                    to: current_job_id,
+                    edge_type: "in".to_string(),
+                });
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn traverse_downstream(
+        &self,
+        conn: &rusqlite::Connection,
+        current_job_id: i64,
+        current_job_name: &str,
+        current_level: i32,
+        max_depth: i32,
+        nodes: &mut Vec<super::models::GraphNode>,
+        edges: &mut Vec<super::models::GraphEdge>,
+        visited: &mut std::collections::HashSet<i64>,
+        levels: &mut std::collections::HashMap<i64, i32>,
+    ) -> Result<()> {
+        if current_level > max_depth {
+            tracing::debug!("[E2E-GRAPH] Reached max depth {} for downstream traversal", max_depth);
+            return Ok(());
+        }
+        
+        tracing::debug!("[E2E-GRAPH] Downstream level {}: Processing job_id={}", current_level, current_job_id);
+        
+        // Find jobs that depend on current job
+        let out_query = "SELECT DISTINCT job_id FROM in_conditions WHERE condition_name = ?";
+        let mut out_stmt = conn.prepare(out_query)?;
+        let dependent_job_ids: Vec<i64> = out_stmt
+            .query_map([current_job_name], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        tracing::debug!("[E2E-GRAPH] Found {} dependent jobs for '{}'", dependent_job_ids.len(), current_job_name);
+        
+        for dep_job_id in dependent_job_ids {
+            if let Ok(dep_job) = conn.query_row(
+                "SELECT id, job_name, folder_name, application, description FROM jobs WHERE id = ?",
+                [dep_job_id],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?
+                    ))
+                }
+            ) {
+                if !visited.contains(&dep_job.0) {
+                    // Color based on level (downstream = orange shades)
+                    let color = match current_level {
+                        1 => "#FF9800".to_string(), // Orange
+                        2 => "#F57C00".to_string(), // Darker orange
+                        3 => "#E65100".to_string(), // Even darker
+                        _ => "#BF360C".to_string(), // Darkest orange
+                    };
+                    
+                    nodes.push(super::models::GraphNode {
+                        id: dep_job.0,
+                        label: dep_job.1.clone(),
+                        folder: dep_job.2.clone(),
+                        application: dep_job.3.clone(),
+                        description: dep_job.4.clone(),
+                        color,
+                        is_current: false,
+                    });
+                    visited.insert(dep_job.0);
+                    levels.insert(dep_job.0, current_level); // Positive for downstream
+                    
+                    tracing::debug!("[E2E-GRAPH] Added downstream node at level {}: {}", current_level, dep_job.1);
+                    
+                    // Recursively traverse jobs that depend on this job
+                    self.traverse_downstream(conn, dep_job.0, &dep_job.1, current_level + 1, max_depth, nodes, edges, visited, levels)?;
+                }
+                
+                edges.push(super::models::GraphEdge {
+                    from: current_job_id,
+                    to: dep_job.0,
+                    edge_type: "out".to_string(),
+                });
+            }
+        }
+        
+        Ok(())
+    }
 }

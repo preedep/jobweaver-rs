@@ -352,3 +352,49 @@ pub async fn get_job_graph(
         },
     }
 }
+
+/// Gets end-to-end dependency graph data for a specific job
+///
+/// Returns nodes and edges for visualizing full dependency chain (upstream and downstream).
+///
+/// # Arguments
+///
+/// * `repo` - Job repository for database access
+/// * `path` - Job ID from URL path
+/// * `query` - Query parameters (depth)
+///
+/// # Returns
+///
+/// HTTP 200 with graph data on success, HTTP 500 on error
+pub async fn get_job_graph_end_to_end(
+    repo: web::Data<Arc<JobRepository>>,
+    path: web::Path<i64>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> impl Responder {
+    let job_id = path.into_inner();
+    let depth = query.get("depth")
+        .and_then(|d| d.parse::<i32>().ok());
+    
+    info!("🌐 [API] GET /jobs/{}/graph/end-to-end?depth={:?}", job_id, depth);
+    
+    match repo.get_end_to_end_graph(job_id, depth) {
+        Ok(graph_data) => {
+            info!("✅ [API] Successfully retrieved end-to-end graph for job_id={} ({} nodes, {} edges)", 
+                  job_id, graph_data.nodes.len(), graph_data.edges.len());
+            HttpResponse::Ok().json(ApiResponse {
+                success: true,
+                data: Some(graph_data),
+                error: None,
+            })
+        },
+        Err(e) => {
+            error!("❌ [API] Failed to get end-to-end graph for job_id={}: {}", job_id, e);
+            error!("[API] Error details: {:?}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()> {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            })
+        },
+    }
+}

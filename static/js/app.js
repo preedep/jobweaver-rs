@@ -1331,16 +1331,40 @@ async function exportToCSV() {
 
 // Job Dependency Graph
 let currentNetwork = null;
+let currentGraphJobId = null;
+let currentGraphMode = 'direct'; // 'direct' or 'e2e'
 
 async function showJobGraph(jobId) {
+    currentGraphJobId = jobId;
+    currentGraphMode = 'direct';
+    
+    // Reset UI
+    document.getElementById('btn-direct-graph').classList.add('active');
+    document.getElementById('btn-e2e-graph').classList.remove('active');
+    document.getElementById('depth-selector').style.display = 'none';
+    
     const modal = document.getElementById('graph-modal');
     const graphContainer = document.getElementById('graph-container');
     
     modal.classList.add('active');
     graphContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading graph...</div></div>';
     
+    await loadGraph(jobId, 'direct');
+}
+
+async function loadGraph(jobId, mode, depth = null) {
+    const graphContainer = document.getElementById('graph-container');
+    
     try {
-        const response = await fetch(`${API_BASE}/jobs/${jobId}/graph`, {
+        let url = `${API_BASE}/jobs/${jobId}/graph`;
+        if (mode === 'e2e') {
+            url = `${API_BASE}/jobs/${jobId}/graph/end-to-end`;
+            if (depth) {
+                url += `?depth=${depth}`;
+            }
+        }
+        
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -1353,7 +1377,7 @@ async function showJobGraph(jobId) {
         const result = await response.json();
         
         if (result.success && result.data) {
-            renderJobGraph(result.data);
+            renderJobGraph(result.data, mode);
         } else {
             graphContainer.innerHTML = '<div style="padding: 40px; text-align: center;"><p class="error">Failed to load graph data</p></div>';
         }
@@ -1363,7 +1387,35 @@ async function showJobGraph(jobId) {
     }
 }
 
-function renderJobGraph(graphData) {
+function toggleGraphMode(mode) {
+    currentGraphMode = mode;
+    
+    // Update button states
+    if (mode === 'direct') {
+        document.getElementById('btn-direct-graph').classList.add('active');
+        document.getElementById('btn-e2e-graph').classList.remove('active');
+        document.getElementById('depth-selector').style.display = 'none';
+    } else {
+        document.getElementById('btn-direct-graph').classList.remove('active');
+        document.getElementById('btn-e2e-graph').classList.add('active');
+        document.getElementById('depth-selector').style.display = 'flex';
+    }
+    
+    // Reload graph with new mode
+    reloadGraph();
+}
+
+function reloadGraph() {
+    if (!currentGraphJobId) return;
+    
+    const graphContainer = document.getElementById('graph-container');
+    graphContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%;"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading graph...</div></div>';
+    
+    const depth = currentGraphMode === 'e2e' ? parseInt(document.getElementById('graph-depth').value) : null;
+    loadGraph(currentGraphJobId, currentGraphMode, depth);
+}
+
+function renderJobGraph(graphData, mode = 'direct') {
     const graphContainer = document.getElementById('graph-container');
     
     // Update header info
@@ -1441,7 +1493,34 @@ function renderJobGraph(graphData) {
     
     const data = { nodes, edges };
     
-    const options = {
+    // Use hierarchical layout for end-to-end mode
+    const options = mode === 'e2e' ? {
+        layout: {
+            hierarchical: {
+                enabled: true,
+                direction: 'LR', // Left to Right
+                sortMethod: 'directed',
+                levelSeparation: 200,
+                nodeSpacing: 150,
+                treeSpacing: 200
+            }
+        },
+        physics: {
+            enabled: false // Disable physics for hierarchical layout
+        },
+        edges: {
+            smooth: {
+                type: 'cubicBezier',
+                forceDirection: 'horizontal',
+                roundness: 0.4
+            }
+        },
+        interaction: {
+            dragNodes: true,
+            dragView: true,
+            zoomView: true
+        }
+    } : {
         layout: {
             randomSeed: 42,
             improvedLayout: true
@@ -1578,6 +1657,8 @@ window.closeGraphModal = closeGraphModal;
 window.closeJobDetailModal = closeJobDetailModal;
 window.fitGraphToScreen = fitGraphToScreen;
 window.zoomIn = zoomIn;
+window.toggleGraphMode = toggleGraphMode;
+window.reloadGraph = reloadGraph;
 window.zoomOut = zoomOut;
 window.resetGraph = resetGraph;
 

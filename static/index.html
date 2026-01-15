@@ -706,6 +706,30 @@
                     </button>
                 </div>
                 <div class="graph-controls">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-right: 20px; padding-right: 20px; border-right: 1px solid #e5e7eb;">
+                        <label style="font-weight: 600; color: #374151;">Graph Mode:</label>
+                        <button id="btn-direct-graph" class="graph-mode-btn active" onclick="toggleGraphMode('direct')">
+                            <i class="fas fa-link"></i> Direct
+                        </button>
+                        <button id="btn-e2e-graph" class="graph-mode-btn" onclick="toggleGraphMode('e2e')">
+                            <i class="fas fa-project-diagram"></i> End-to-End
+                        </button>
+                        <div id="depth-selector" style="display: none; align-items: center; gap: 8px;">
+                            <label style="font-size: 13px; color: #6b7280;">Depth:</label>
+                            <select id="graph-depth" onchange="reloadGraph()" style="padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5" selected>5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                            </select>
+                        </div>
+                    </div>
                     <button onclick="fitGraphToScreen()">
                         <i class="fas fa-compress-arrows-alt"></i> Fit to Screen
                     </button>

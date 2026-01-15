@@ -1006,6 +1006,38 @@ body {
     border-color: #9ca3af;
 }
 
+.graph-mode-btn {
+    padding: 8px 16px !important;
+    border: 2px solid #d1d5db !important;
+    background: white !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    transition: all 0.2s !important;
+    color: #6b7280 !important;
+}
+
+.graph-mode-btn:hover {
+    background: #f3f4f6 !important;
+    border-color: #9ca3af !important;
+    color: #374151 !important;
+}
+
+.graph-mode-btn.active {
+    background: #667eea !important;
+    border-color: #667eea !important;
+    color: white !important;
+}
+
+.graph-mode-btn.active:hover {
+    background: #5568d3 !important;
+    border-color: #5568d3 !important;
+}
+
 .graph-modal-body {
     flex: 1;
     padding: 0;
