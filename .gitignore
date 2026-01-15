@@ -31,3 +31,4 @@ target
 /*.db
 /static/index.html.new
 .env
+/count_columns.sh
