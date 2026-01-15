@@ -180,10 +180,10 @@ pub async fn search_jobs(
 ) -> HttpResponse {
     let request = query.into_inner();
     info!("🌐 [API] POST /jobs/search");
-    info!("📋 [API] Basic filters: job_name={:?}, folder={:?}, app={:?}, appl_type={:?}, appl_ver={:?}, task_type={:?}, critical={:?}, datacenter={:?}, folder_order_method={:?}",
+    info!("📋 [API] Basic filters: job_name={:?}, folder={:?}, app={:?}, appl_type={:?}, appl_ver={:?}, task_type={:?}, critical={:?}, datacenter={:?}, folder_order_method={:?}, has_odate={:?}",
           request.job_name, request.folder_name, request.application, 
           request.appl_type, request.appl_ver, request.task_type, request.critical,
-          request.datacenter, request.folder_order_method);
+          request.datacenter, request.folder_order_method, request.has_odate);
     info!("📊 [API] Dependency filters: min_deps={:?}, max_deps={:?}, min_on_conds={:?}, max_on_conds={:?}",
           request.min_dependencies, request.max_dependencies, request.min_on_conditions, request.max_on_conditions);
     info!("💾 [API] Variable filters: has_vars={:?}, min_vars={:?}",

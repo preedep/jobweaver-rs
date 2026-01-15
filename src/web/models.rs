@@ -42,6 +42,7 @@ pub struct JobSearchRequest {
     pub critical: Option<bool>,
     pub datacenter: Option<String>,
     pub folder_order_method: Option<String>,
+    pub has_odate: Option<bool>,
     pub min_dependencies: Option<i32>,
     pub max_dependencies: Option<i32>,
     pub min_on_conditions: Option<i32>,

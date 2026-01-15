@@ -693,7 +693,8 @@ function collectFilterValues() {
         minOnConds: document.getElementById('filter-min-on-conds')?.value?.trim(),
         maxOnConds: document.getElementById('filter-max-on-conds')?.value?.trim(),
         hasVars: document.getElementById('filter-has-variables')?.value,
-        minVars: document.getElementById('filter-min-variables')?.value?.trim()
+        minVars: document.getElementById('filter-min-variables')?.value?.trim(),
+        hasOdate: document.getElementById('filter-has-odate')?.value
     };
 }
 
@@ -722,6 +723,7 @@ function buildFiltersObject(values) {
     if (values.maxOnConds) filters.max_on_conditions = parseInt(values.maxOnConds);
     if (values.hasVars && values.hasVars !== '') filters.has_variables = values.hasVars === 'true';
     if (values.minVars) filters.min_variables = parseInt(values.minVars);
+    if (values.hasOdate && values.hasOdate !== '') filters.has_odate = values.hasOdate === 'true';
     
     return filters;
 }

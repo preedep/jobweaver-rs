@@ -140,6 +140,16 @@ impl JobRepository {
         self.add_count_filter(&mut where_clauses, &mut params_vec, request.max_on_conditions,
             "(SELECT COUNT(*) FROM on_conditions WHERE on_conditions.job_id = j.id) <= ?", "<=", "max_on_conditions", true);
         
+        // ODATE filter
+        if let Some(has_odate) = request.has_odate {
+            tracing::debug!("  ➕ Adding has_odate filter: {}", has_odate);
+            if has_odate {
+                where_clauses.push("(j.odate IS NOT NULL AND j.odate != '')");
+            } else {
+                where_clauses.push("(j.odate IS NULL OR j.odate = '')");
+            }
+        }
+        
         // Variable filters
         if let Some(has_vars) = request.has_variables {
             tracing::debug!("  ➕ Adding has_variables filter: {}", has_vars);
