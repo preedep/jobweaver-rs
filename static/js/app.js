@@ -995,52 +995,92 @@ function updatePageStats(total, filtered) {
 }
 
 /**
+ * Helper function to render a badge with count
+ * @param {string} type - Badge type (info, success, danger, warning, primary)
+ * @param {number} count - Count to display
+ * @param {string} title - Optional tooltip title
+ * @returns {string} HTML string for badge
+ */
+function renderCountBadge(type, count, title = '') {
+    const titleAttr = title ? ` title="${title}"` : '';
+    return `<span class="badge badge-${type}"${titleAttr}>${count || 0}</span>`;
+}
+
+/**
+ * Helper function to render a boolean badge
+ * @param {boolean} value - Boolean value
+ * @param {string} trueType - Badge type for true (danger, warning, etc.)
+ * @param {string} falseType - Badge type for false
+ * @returns {string} HTML string for badge
+ */
+function renderBooleanBadge(value, trueType, falseType) {
+    return value 
+        ? `<span class="badge badge-${trueType}">Yes</span>`
+        : `<span class="badge badge-${falseType}">No</span>`;
+}
+
+/**
+ * Helper function to render a table cell with optional value
+ * @param {*} value - Value to display
+ * @param {string} defaultValue - Default value if empty (default: '-')
+ * @param {boolean} escape - Whether to escape HTML (default: true)
+ * @returns {string} HTML string for cell content
+ */
+function renderCell(value, defaultValue = '-', escape = true) {
+    const displayValue = value ?? defaultValue;
+    return escape ? escapeHtml(displayValue) : displayValue;
+}
+
+/**
+ * Helper function to render action buttons for a job
+ * @param {number} jobId - Job ID
+ * @returns {string} HTML string for action buttons
+ */
+function renderJobActions(jobId) {
+    return `
+        <button class="btn btn-icon" onclick="viewJobDetail(${jobId})" title="View Details">
+            <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-icon" onclick="showJobGraph(${jobId})" title="View Graph">
+            <i class="fas fa-project-diagram"></i>
+        </button>
+    `;
+}
+
+/**
  * Renders a single job row for the table
  * 
  * @param {Object} job - Job data object
  * @returns {string} HTML string for table row
  */
 function renderJobRow(job) {
-    const criticalBadge = job.critical 
-        ? '<span class="badge badge-danger">Yes</span>' 
-        : '<span class="badge badge-success">No</span>';
-    const cyclicBadge = job.cyclic 
-        ? '<span class="badge badge-warning">Yes</span>' 
-        : '<span class="badge badge-secondary">No</span>';
-    
     return `
         <tr>
             <td><strong>${escapeHtml(job.job_name)}</strong></td>
             <td><span title="${escapeHtml(job.folder_name)}">${escapeHtml(job.folder_name)}</span></td>
-            <td>${escapeHtml(job.datacenter || '-')}</td>
-            <td>${escapeHtml(job.folder_order_method || '-')}</td>
-            <td>${escapeHtml(job.application || '-')}</td>
-            <td>${escapeHtml(job.sub_application || '-')}</td>
-            <td>${escapeHtml(job.appl_type || '-')}</td>
-            <td>${escapeHtml(job.appl_ver || '-')}</td>
-            <td>${escapeHtml(job.task_type || '-')}</td>
-            <td>${criticalBadge}</td>
-            <td>${cyclicBadge}</td>
-            <td><span title="${escapeHtml(job.node_id || '')}">${escapeHtml(job.node_id || '-')}</span></td>
-            <td>${escapeHtml(job.group || '-')}</td>
-            <td>${escapeHtml(job.memname || '-')}</td>
-            <td>${escapeHtml(job.owner || '-')}</td>
-            <td>${job.maxwait !== null && job.maxwait !== undefined ? job.maxwait : '-'}</td>
-            <td>${job.maxrerun !== null && job.maxrerun !== undefined ? job.maxrerun : '-'}</td>
-            <td>${escapeHtml(job.shift || '-')}</td>
-            <td><span class="badge badge-info">${job.control_resources_count || 0}</span></td>
-            <td><span class="badge badge-info">${job.variables_count || 0}</span></td>
-            <td><span class="badge badge-success">${job.in_conditions_count || 0}</span></td>
-            <td><span class="badge badge-danger">${job.out_conditions_count || 0}</span></td>
-            <td><span class="badge badge-warning">${job.on_conditions_count || 0}</span></td>
-            <td>
-                <button class="btn btn-icon" onclick="viewJobDetail(${job.id})" title="View Details">
-                    <i class="fas fa-eye"></i>
-                </button>
-                <button class="btn btn-icon" onclick="showJobGraph(${job.id})" title="View Graph">
-                    <i class="fas fa-project-diagram"></i>
-                </button>
-            </td>
+            <td>${renderCell(job.datacenter)}</td>
+            <td>${renderCell(job.folder_order_method)}</td>
+            <td>${renderCell(job.application)}</td>
+            <td>${renderCell(job.sub_application)}</td>
+            <td>${renderCell(job.appl_type)}</td>
+            <td>${renderCell(job.appl_ver)}</td>
+            <td>${renderCell(job.task_type)}</td>
+            <td>${renderBooleanBadge(job.critical, 'danger', 'success')}</td>
+            <td>${renderBooleanBadge(job.cyclic, 'warning', 'secondary')}</td>
+            <td><span title="${escapeHtml(job.node_id || '')}">${renderCell(job.node_id)}</span></td>
+            <td>${renderCell(job.group)}</td>
+            <td>${renderCell(job.memname)}</td>
+            <td>${renderCell(job.owner)}</td>
+            <td>${renderCell(job.maxwait)}</td>
+            <td>${renderCell(job.maxrerun)}</td>
+            <td>${renderCell(job.shift)}</td>
+            <td>${renderCountBadge('info', job.control_resources_count)}</td>
+            <td>${renderCountBadge('info', job.variables_count)}</td>
+            <td>${renderCountBadge('success', job.in_conditions_count)}</td>
+            <td>${renderCountBadge('danger', job.out_conditions_count)}</td>
+            <td>${renderCountBadge('warning', job.on_conditions_count)}</td>
+            <td>${renderCountBadge('primary', job.total_dependencies_e2e, 'End-to-End Dependencies (including transitive)')}</td>
+            <td>${renderJobActions(job.id)}</td>
         </tr>
     `;
 }

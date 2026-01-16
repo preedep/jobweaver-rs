@@ -311,7 +311,8 @@ impl JobRepository {
                 (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id) as out_cond_count,
                 (SELECT COUNT(*) FROM on_conditions WHERE job_id = j.id) as on_cond_count,
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id) as ctrl_res_count,
-                (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) as var_count
+                (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) as var_count,
+                0 as total_dependencies_e2e
             FROM jobs j
             LEFT JOIN folders f ON j.folder_name = f.folder_name
             {}
@@ -456,6 +457,7 @@ impl JobRepository {
             on_conditions_count: row.get(113)?,
             control_resources_count: row.get(114)?,
             variables_count: row.get(115)?,
+            total_dependencies_e2e: row.get(116)?,
         })
     }
 
@@ -1372,5 +1374,58 @@ impl JobRepository {
         }
         
         Ok(())
+    }
+
+    /// Calculate end-to-end dependencies count for a specific job
+    pub fn get_e2e_dependencies_count(&self, job_id: i64) -> Result<u32> {
+        let conn = self.conn.lock().unwrap();
+        
+        let count: u32 = conn.query_row(
+            r#"
+            WITH RECURSIVE dep_tree AS (
+                -- Base case: direct dependencies (jobs that this job depends on)
+                SELECT DISTINCT j2.id as dep_job_id, 1 as depth
+                FROM in_conditions ic
+                JOIN jobs j2 ON (
+                    j2.job_name = ic.condition_name 
+                    OR j2.job_name = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                        ic.condition_name,
+                        '-ENDED-OK', ''),
+                        '-ENDED-NOTOK', ''),
+                        '_ENDED_OK', ''),
+                        '_ENDED_NOTOK', ''),
+                        '-ENDED', ''),
+                        '-OK', '')
+                    OR j2.job_name = REPLACE(ic.condition_name, '-NOTOK', '')
+                )
+                WHERE ic.job_id = ?
+                
+                UNION
+                
+                -- Recursive case: transitive dependencies
+                SELECT DISTINCT j3.id as dep_job_id, dt.depth + 1
+                FROM dep_tree dt
+                JOIN in_conditions ic2 ON ic2.job_id = dt.dep_job_id
+                JOIN jobs j3 ON (
+                    j3.job_name = ic2.condition_name 
+                    OR j3.job_name = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                        ic2.condition_name,
+                        '-ENDED-OK', ''),
+                        '-ENDED-NOTOK', ''),
+                        '_ENDED_OK', ''),
+                        '_ENDED_NOTOK', ''),
+                        '-ENDED', ''),
+                        '-OK', '')
+                    OR j3.job_name = REPLACE(ic2.condition_name, '-NOTOK', '')
+                )
+                WHERE dt.depth < 10
+            )
+            SELECT COUNT(DISTINCT dep_job_id) FROM dep_tree
+            "#,
+            [job_id],
+            |row| row.get(0)
+        )?;
+        
+        Ok(count)
     }
 }

@@ -209,6 +209,7 @@ pub struct JobDetail {
     pub on_conditions_count: u32,
     pub control_resources_count: u32,
     pub variables_count: u32,
+    pub total_dependencies_e2e: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
