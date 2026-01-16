@@ -233,16 +233,24 @@ function initializeSearchListeners() {
  * Initializes table column header click listeners for sorting
  */
 function initializeTableListeners() {
-    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
+    const sortableHeaders = document.querySelectorAll('.data-table th[data-sort], .data-table-modern th[data-sort]');
+    console.log(`🔧 [TABLE] Initializing table listeners for ${sortableHeaders.length} sortable headers`);
+    
+    sortableHeaders.forEach((th, index) => {
+        console.log(`  ${index + 1}. Column: ${th.textContent.trim()} | data-sort: ${th.dataset.sort}`);
+        
         // Remove old listener by cloning and replacing the element
         const newTh = th.cloneNode(true);
         th.parentNode.replaceChild(newTh, th);
         
         // Add new listener
         newTh.addEventListener('click', () => {
+            console.log(`🖱️  [TABLE] Header clicked: ${newTh.dataset.sort}`);
             handleTableSort(newTh.dataset.sort);
         });
     });
+    
+    console.log('✅ [TABLE] Table listeners initialized');
 }
 
 /**
@@ -252,16 +260,23 @@ function initializeTableListeners() {
  * @param {string} sortBy - Column name to sort by
  */
 function handleTableSort(sortBy) {
+    console.log(`📊 [SORT] Sort requested for column: ${sortBy}`);
+    console.log(`📊 [SORT] Current sort state - by: ${currentSort.by}, order: ${currentSort.order}`);
+    
     if (currentSort.by === sortBy) {
         currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+        console.log(`📊 [SORT] Toggling sort order to: ${currentSort.order}`);
     } else {
         currentSort.by = sortBy;
         currentSort.order = 'asc';
+        console.log(`📊 [SORT] New column sort - by: ${sortBy}, order: asc`);
     }
     
     // Update sort icons
+    console.log(`🎨 [SORT] Updating sort icons...`);
     updateSortIcons(sortBy, currentSort.order);
     
+    console.log(`🔍 [SORT] Performing search with new sort...`);
     performSearch();
 }
 
@@ -272,13 +287,21 @@ function handleTableSort(sortBy) {
  * @param {string} order - Sort order ('asc' or 'desc')
  */
 function updateSortIcons(sortBy, order) {
-    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
+    const headers = document.querySelectorAll('.data-table th[data-sort], .data-table-modern th[data-sort]');
+    console.log(`🎨 [SORT] Updating icons for ${headers.length} headers (active: ${sortBy}, order: ${order})`);
+    
+    headers.forEach(th => {
         const icon = th.querySelector('i');
-        if (!icon) return;
+        if (!icon) {
+            console.log(`  ⚠️  No icon found in header: ${th.dataset.sort}`);
+            return;
+        }
         
         if (th.dataset.sort === sortBy) {
             // Update icon for active sort column
-            icon.className = order === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+            const newClass = order === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+            icon.className = newClass;
+            console.log(`  ✅ Active column: ${sortBy} → ${newClass}`);
         } else {
             // Reset icon for other columns
             icon.className = 'fas fa-sort';
