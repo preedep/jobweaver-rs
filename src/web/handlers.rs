@@ -238,10 +238,15 @@ pub async fn get_job_detail(
 /// Gets dashboard statistics
 ///
 /// Returns aggregated statistics for the dashboard view.
+/// Supports optional filtering by folder_order_method presence.
 ///
 /// # Arguments
 ///
 /// * `repository` - Job repository for database access
+/// * `filter` - Optional query parameter to filter by folder_order_method
+///   - "with": Only jobs in folders with folder_order_method
+///   - "without": Only jobs in folders without folder_order_method
+///   - None/other: All jobs
 /// * `_auth` - Bearer token authentication
 ///
 /// # Returns
@@ -249,9 +254,11 @@ pub async fn get_job_detail(
 /// HTTP 200 with statistics on success, HTTP 500 on error
 pub async fn get_dashboard_stats(
     repository: web::Data<Arc<JobRepository>>,
+    filter: web::Query<DashboardFilter>,
     _auth: BearerAuth,
 ) -> HttpResponse {
-    match repository.get_dashboard_stats() {
+    let filter_value = filter.folder_order_method_filter.as_deref();
+    match repository.get_dashboard_stats(filter_value) {
         Ok(stats) => HttpResponse::Ok().json(ApiResponse::success(stats)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
             format!("Failed to get dashboard stats: {}", e)

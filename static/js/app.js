@@ -120,6 +120,7 @@ function initializeEventListeners() {
     initializeSearchListeners();
     initializeTableListeners();
     initializeModalListeners();
+    initializeDashboardListeners();
 }
 
 /**
@@ -281,6 +282,31 @@ function closeAllModals() {
 }
 
 /**
+ * Initializes dashboard filter event listeners
+ */
+function initializeDashboardListeners() {
+    const dashboardFilter = document.getElementById('dashboard-folder-filter');
+    console.log('📊 [DASHBOARD] Initializing dashboard listeners...');
+    console.log('📊 [DASHBOARD] Filter element found:', dashboardFilter);
+    
+    if (dashboardFilter) {
+        // Remove any existing listener to prevent duplicates
+        const newFilter = dashboardFilter.cloneNode(true);
+        dashboardFilter.parentNode.replaceChild(newFilter, dashboardFilter);
+        
+        // Add the event listener to the new element
+        newFilter.addEventListener('change', (e) => {
+            const filterValue = e.target.value;
+            console.log(`📊 [DASHBOARD] Filter changed to: ${filterValue || 'All Jobs'}`);
+            loadDashboard(filterValue);
+        });
+        console.log('📊 [DASHBOARD] Event listener attached successfully');
+    } else {
+        console.warn('📊 [DASHBOARD] Filter element not found - will retry when dashboard page is shown');
+    }
+}
+
+/**
  * Handles user login form submission
  * Validates credentials and stores JWT token on success
  * 
@@ -434,6 +460,7 @@ function switchContentPage(page) {
     if (pageElement) pageElement.classList.add('active');
     
     if (page === 'dashboard') {
+        initializeDashboardListeners(); // Re-attach event listener
         loadDashboard();
     } else if (page === 'jobs') {
         loadFilterOptions();
@@ -451,13 +478,14 @@ function switchContentPage(page) {
  * 
  * @returns {Promise<void>}
  */
-async function loadDashboard() {
+async function loadDashboard(filter = '') {
     const startTime = performance.now();
     console.log('📊 [DASHBOARD] Loading dashboard statistics...');
     
     try {
         const fetchStart = performance.now();
-        const response = await fetch(`${API_BASE}/dashboard/stats`, {
+        const url = filter ? `${API_BASE}/dashboard/stats?folder_order_method_filter=${filter}` : `${API_BASE}/dashboard/stats`;
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }

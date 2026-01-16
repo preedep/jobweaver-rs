@@ -670,27 +670,52 @@ impl JobRepository {
         Ok(metadata)
     }
 
-    pub fn get_dashboard_stats(&self) -> Result<DashboardStats> {
+    pub fn get_dashboard_stats(&self, filter: Option<&str>) -> Result<DashboardStats> {
         let conn = self.conn.lock().unwrap();
         
-        let total_jobs: u32 = conn.query_row("SELECT COUNT(*) FROM jobs", [], |row| row.get(0))?;
-        let total_folders: u32 = conn.query_row("SELECT COUNT(DISTINCT folder_name) FROM jobs", [], |row| row.get(0))?;
-        let critical_jobs: u32 = conn.query_row("SELECT COUNT(*) FROM jobs WHERE critical = 1", [], |row| row.get(0))?;
-        let cyclic_jobs: u32 = conn.query_row("SELECT COUNT(*) FROM jobs WHERE cyclic = 1", [], |row| row.get(0))?;
+        // Build WHERE clause based on filter
+        let folder_filter = match filter {
+            Some("with") => "f.folder_order_method IS NOT NULL AND f.folder_order_method != ''",
+            Some("without") => "f.folder_order_method IS NULL OR f.folder_order_method = ''",
+            _ => "1=1", // No filter, show all
+        };
+        
+        tracing::info!("Dashboard stats filter: {:?}, SQL filter: {}", filter, folder_filter);
+        
+        let total_jobs: u32 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {}", folder_filter),
+            [],
+            |row| row.get(0)
+        )?;
+        let total_folders: u32 = conn.query_row(
+            &format!("SELECT COUNT(DISTINCT j.folder_name) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {}", folder_filter),
+            [],
+            |row| row.get(0)
+        )?;
+        let critical_jobs: u32 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE j.critical = 1 AND {}", folder_filter),
+            [],
+            |row| row.get(0)
+        )?;
+        let cyclic_jobs: u32 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE j.cyclic = 1 AND {}", folder_filter),
+            [],
+            |row| row.get(0)
+        )?;
         
         let file_transfer_jobs: u32 = conn.query_row(
-            "SELECT COUNT(*) FROM jobs WHERE appl_type = 'FILE_TRANS' OR appl_type = 'FileWatch'",
+            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE (j.appl_type = 'FILE_TRANS' OR j.appl_type = 'FileWatch') AND {}", folder_filter),
             [],
             |row| row.get(0)
         )?;
         
         let cli_jobs: u32 = conn.query_row(
-            "SELECT COUNT(*) FROM jobs WHERE task_type = 'Command' OR task_type = 'Script' OR cmdline IS NOT NULL",
+            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE (j.task_type = 'Command' OR j.task_type = 'Script' OR j.cmdline IS NOT NULL) AND {}", folder_filter),
             [],
             |row| row.get(0)
         )?;
         
-        let mut stmt = conn.prepare("SELECT application, COUNT(*) as count FROM jobs WHERE application IS NOT NULL GROUP BY application ORDER BY count DESC LIMIT 10")?;
+        let mut stmt = conn.prepare(&format!("SELECT j.application, COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE j.application IS NOT NULL AND {} GROUP BY j.application ORDER BY count DESC LIMIT 10", folder_filter))?;
         let jobs_by_application = stmt.query_map([], |row| {
             Ok(ApplicationStat {
                 application: row.get(0)?,
@@ -698,7 +723,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT folder_name, COUNT(*) as count FROM jobs GROUP BY folder_name ORDER BY count DESC LIMIT 10")?;
+        let mut stmt = conn.prepare(&format!("SELECT j.folder_name, COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {} GROUP BY j.folder_name ORDER BY count DESC LIMIT 10", folder_filter))?;
         let jobs_by_folder = stmt.query_map([], |row| {
             Ok(FolderStat {
                 folder_name: row.get(0)?,
@@ -706,7 +731,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT COALESCE(task_type, 'Unknown'), COUNT(*) as count FROM jobs GROUP BY task_type ORDER BY count DESC")?;
+        let mut stmt = conn.prepare(&format!("SELECT COALESCE(j.task_type, 'Unknown'), COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {} GROUP BY j.task_type ORDER BY count DESC", folder_filter))?;
         let jobs_by_task_type = stmt.query_map([], |row| {
             Ok(TaskTypeStat {
                 task_type: row.get(0)?,
@@ -714,7 +739,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT COALESCE(appl_type, 'Unknown'), COUNT(*) as count FROM jobs GROUP BY appl_type ORDER BY count DESC")?;
+        let mut stmt = conn.prepare(&format!("SELECT COALESCE(j.appl_type, 'Unknown'), COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {} GROUP BY j.appl_type ORDER BY count DESC", folder_filter))?;
         let jobs_by_appl_type = stmt.query_map([], |row| {
             Ok(ApplTypeStat {
                 appl_type: row.get(0)?,
