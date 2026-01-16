@@ -667,15 +667,151 @@ impl JobRepository {
         Ok(edits)
     }
 
-    fn get_metadata(&self, conn: &Connection, job_id: i64) -> Result<Vec<Variable>> {
-        let mut stmt = conn.prepare("SELECT meta_key, meta_value FROM job_metadata WHERE job_id = ?")?;
+    fn get_metadata(&self, conn: &Connection, job_id: i64) -> Result<Vec<JobMetadata>> {
+        let mut stmt = conn.prepare(
+            "SELECT meta_key, meta_value FROM job_metadata WHERE job_id = ?"
+        )?;
         let metadata = stmt.query_map(params![job_id], |row| {
-            Ok(Variable {
-                name: row.get(0)?,
+            Ok(JobMetadata {
+                key: row.get(0)?,
                 value: row.get(1)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(metadata)
+    }
+
+    pub fn get_dependency_graph(&self, job_id: i64) -> Result<DependencyGraph> {
+        let conn = self.conn.lock().unwrap();
+        
+        // Get root job info
+        let root_job: (String, String) = conn.query_row(
+            "SELECT folder_name, datacenter FROM jobs WHERE id = ?",
+            params![job_id],
+            |row| Ok((row.get(0)?, row.get(1)?))
+        )?;
+        let (root_folder, root_datacenter) = root_job;
+        
+        // Get all nodes (jobs involved in dependency chain)
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        
+        // Get upstream dependencies (jobs that this job depends on)
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT DISTINCT
+                j2.id, j2.job_name, j2.folder_name, j2.datacenter,
+                ic.condition_name
+            FROM jobs j1
+            INNER JOIN in_conditions ic ON j1.id = ic.job_id
+            INNER JOIN out_conditions oc ON ic.condition_name = oc.condition_name 
+                AND (ic.odate = oc.odate OR (ic.odate IS NULL AND oc.odate IS NULL))
+            INNER JOIN jobs j2 ON oc.job_id = j2.id
+            WHERE j1.id = ?
+            "#
+        )?;
+        
+        let upstream = stmt.query_map(params![job_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?.collect::<Result<Vec<_>, _>>()?;
+        
+        for (id, job_name, folder_name, datacenter, condition_name) in upstream {
+            let is_internal = folder_name == root_folder && datacenter == root_datacenter;
+            nodes.push(DependencyNode {
+                id,
+                job_name,
+                folder_name,
+                datacenter,
+                is_internal,
+            });
+            edges.push(DependencyEdge {
+                source_id: id,
+                target_id: job_id,
+                condition_name,
+                edge_type: "in".to_string(),
+            });
+        }
+        
+        // Get downstream dependencies (jobs that depend on this job)
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT DISTINCT
+                j2.id, j2.job_name, j2.folder_name, j2.datacenter,
+                oc.condition_name
+            FROM jobs j1
+            INNER JOIN out_conditions oc ON j1.id = oc.job_id
+            INNER JOIN in_conditions ic ON oc.condition_name = ic.condition_name 
+                AND (oc.odate = ic.odate OR (oc.odate IS NULL AND ic.odate IS NULL))
+            INNER JOIN jobs j2 ON ic.job_id = j2.id
+            WHERE j1.id = ?
+            "#
+        )?;
+        
+        let downstream = stmt.query_map(params![job_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?.collect::<Result<Vec<_>, _>>()?;
+        
+        for (id, job_name, folder_name, datacenter, condition_name) in downstream {
+            let is_internal = folder_name == root_folder && datacenter == root_datacenter;
+            nodes.push(DependencyNode {
+                id,
+                job_name,
+                folder_name,
+                datacenter,
+                is_internal,
+            });
+            edges.push(DependencyEdge {
+                source_id: job_id,
+                target_id: id,
+                condition_name,
+                edge_type: "out".to_string(),
+            });
+        }
+        
+        // Add root job as node
+        let root_node: (String, String) = conn.query_row(
+            "SELECT job_name, datacenter FROM jobs WHERE id = ?",
+            params![job_id],
+            |row| Ok((row.get(0)?, row.get(1)?))
+        )?;
+        nodes.insert(0, DependencyNode {
+            id: job_id,
+            job_name: root_node.0,
+            folder_name: root_folder.clone(),
+            datacenter: root_node.1,
+            is_internal: true,
+        });
+        
+        // Calculate stats
+        let total_dependencies = edges.len();
+        let internal_dependencies = edges.iter().filter(|e| {
+            nodes.iter().any(|n| n.id == e.source_id && n.is_internal) &&
+            nodes.iter().any(|n| n.id == e.target_id && n.is_internal)
+        }).count();
+        let external_dependencies = total_dependencies - internal_dependencies;
+        
+        Ok(DependencyGraph {
+            root_job_id: job_id,
+            nodes,
+            edges,
+            stats: DependencyStats {
+                total_dependencies,
+                internal_dependencies,
+                external_dependencies,
+                max_depth: 1, // TODO: Calculate actual depth with BFS
+            },
+        })
     }
 
     pub fn get_dashboard_stats(&self, folder_filter: Option<&str>, datacenter_filter: Option<&str>) -> Result<DashboardStats> {

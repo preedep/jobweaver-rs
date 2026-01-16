@@ -235,6 +235,31 @@ pub async fn get_job_detail(
     }
 }
 
+/// Get dependency graph for a job
+///
+/// Returns the dependency graph including both upstream and downstream dependencies
+///
+/// # Arguments
+///
+/// * `job_id` - ID of the job
+/// * `repository` - Job repository
+///
+/// # Returns
+///
+/// HTTP 200 with dependency graph, HTTP 404 if not found, HTTP 500 on error
+pub async fn get_dependency_graph(
+    job_id: web::Path<i64>,
+    repository: web::Data<Arc<JobRepository>>,
+    _auth: BearerAuth,
+) -> HttpResponse {
+    match repository.get_dependency_graph(*job_id) {
+        Ok(graph) => HttpResponse::Ok().json(ApiResponse::success(graph)),
+        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+            format!("Failed to get dependency graph: {}", e)
+        )),
+    }
+}
+
 /// Gets dashboard statistics
 ///
 /// Returns aggregated statistics for the dashboard view.
