@@ -634,9 +634,9 @@ async function loadDashboard(folderFilter = '', datacenterFilter = '') {
                 makeChartsClickable();
             }
             
-            // Load top root jobs
+            // Load top root jobs (always show top 10 on dashboard)
             if (typeof loadTopRootJobs === 'function') {
-                loadTopRootJobs(datacenterFilter || null);
+                loadTopRootJobs(datacenterFilter || null, folderFilter || null, 10, 'root-jobs-list');
             }
             
             const endTime = performance.now();

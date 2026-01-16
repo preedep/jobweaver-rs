@@ -680,13 +680,27 @@ impl JobRepository {
         Ok(metadata)
     }
 
-    pub fn get_top_root_jobs(&self, limit: u32, datacenter_filter: Option<&str>) -> Result<Vec<RootJobStat>> {
+    pub fn get_top_root_jobs(&self, limit: u32, datacenter_filter: Option<&str>, folder_filter: Option<&str>) -> Result<Vec<RootJobStat>> {
         let conn = self.conn.lock().unwrap();
         
-        let datacenter_clause = if let Some(dc) = datacenter_filter {
-            format!("AND j.datacenter = '{}'", dc.replace("'", "''"))
-        } else {
+        let mut where_conditions = Vec::new();
+        
+        if let Some(dc) = datacenter_filter {
+            where_conditions.push(format!("j.datacenter = '{}'", dc.replace("'", "''")));
+        }
+        
+        if let Some(filter) = folder_filter {
+            match filter {
+                "with" => where_conditions.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = j.datacenter AND f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
+                "without" => where_conditions.push("NOT EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = j.datacenter AND f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
+                _ => {}
+            }
+        }
+        
+        let where_clause = if where_conditions.is_empty() {
             String::new()
+        } else {
+            format!("AND {}", where_conditions.join(" AND "))
         };
         
         let query = format!(r#"
@@ -731,7 +745,7 @@ impl JobRepository {
             GROUP BY r.id, r.job_name, r.folder_name, r.datacenter
             ORDER BY downstream_count DESC
             LIMIT ?
-        "#, datacenter_clause);
+        "#, where_clause);
         
         let mut stmt = conn.prepare(&query)?;
         let root_jobs = stmt.query_map(params![limit], |row| {

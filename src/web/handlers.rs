@@ -5,6 +5,7 @@
 
 use actix_web::{web, HttpResponse, HttpRequest, HttpMessage, Responder};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
+use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{info, error};
 
@@ -260,16 +261,25 @@ pub async fn get_dependency_graph(
     }
 }
 
+/// Query parameters for top root jobs
+#[derive(Debug, Deserialize)]
+pub struct RootJobsQuery {
+    pub datacenter: Option<String>,
+    pub folder_order_method_filter: Option<String>,
+    pub limit: Option<u32>,
+}
+
 /// Get top root jobs with highest downstream dependency counts
 pub async fn get_top_root_jobs(
     repository: web::Data<Arc<JobRepository>>,
-    datacenter: web::Query<DatacenterFilter>,
+    query: web::Query<RootJobsQuery>,
     _auth: BearerAuth,
 ) -> HttpResponse {
-    let limit = 10;
-    let datacenter_value = datacenter.datacenter.as_deref();
+    let limit = query.limit.unwrap_or(10);
+    let datacenter_value = query.datacenter.as_deref();
+    let folder_filter = query.folder_order_method_filter.as_deref();
     
-    match repository.get_top_root_jobs(limit, datacenter_value) {
+    match repository.get_top_root_jobs(limit, datacenter_value, folder_filter) {
         Ok(root_jobs) => HttpResponse::Ok().json(ApiResponse::success(root_jobs)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
             format!("Failed to get top root jobs: {}", e)

@@ -6,17 +6,23 @@
 /**
  * Load and display top root jobs
  */
-async function loadTopRootJobs(datacenter = null) {
-    const container = document.getElementById('root-jobs-list');
+async function loadTopRootJobs(datacenter = null, folderFilter = null, limit = 10, containerId = 'root-jobs-list') {
+    const container = document.getElementById(containerId);
     if (!container) return;
+    
+    console.log('loadTopRootJobs called with:', { datacenter, folderFilter, limit, containerId });
     
     // Show loading
     container.innerHTML = '<div class="loading-state"><i class="fas fa-spinner fa-spin"></i> Loading root jobs...</div>';
     
     try {
-        const url = datacenter 
-            ? `${API_BASE}/dashboard/root-jobs?datacenter=${encodeURIComponent(datacenter)}`
-            : `${API_BASE}/dashboard/root-jobs`;
+        const params = new URLSearchParams();
+        if (datacenter) params.append('datacenter', datacenter);
+        if (folderFilter) params.append('folder_order_method_filter', folderFilter);
+        params.append('limit', limit);
+        
+        const url = `${API_BASE}/dashboard/root-jobs?${params.toString()}`;
+        console.log('Fetching root jobs from:', url);
             
         const response = await fetch(url, {
             headers: {
@@ -27,7 +33,7 @@ async function loadTopRootJobs(datacenter = null) {
         const result = await response.json();
         
         if (result.success && result.data) {
-            renderRootJobsList(result.data);
+            renderRootJobsList(result.data, containerId);
         } else {
             container.innerHTML = '<div class="error">Failed to load root jobs</div>';
         }
@@ -40,8 +46,8 @@ async function loadTopRootJobs(datacenter = null) {
 /**
  * Render root jobs list
  */
-function renderRootJobsList(rootJobs) {
-    const container = document.getElementById('root-jobs-list');
+function renderRootJobsList(rootJobs, containerId = 'root-jobs-list') {
+    const container = document.getElementById(containerId);
     if (!container) return;
     
     if (rootJobs.length === 0) {
@@ -101,15 +107,27 @@ function renderRootJobsList(rootJobs) {
  * View dependency graph for a root job
  */
 async function viewRootJobGraph(jobId, jobName) {
-    // Open job detail modal and switch to dependencies tab
+    // Check if viewJobDetail exists
+    if (typeof viewJobDetail !== 'function') {
+        console.error('viewJobDetail function not found');
+        return;
+    }
+    
+    // Open job detail modal
     await viewJobDetail(jobId);
     
-    // Wait a bit for modal to open, then switch to dependencies tab
+    // Wait for modal to fully load, then switch to dependencies tab
     setTimeout(() => {
         if (typeof switchTab === 'function') {
             switchTab('dependencies');
+        } else {
+            // Fallback: manually trigger dependencies tab
+            const depsButton = document.querySelector('[data-tab="dependencies"]');
+            if (depsButton) {
+                depsButton.click();
+            }
         }
-    }, 300);
+    }, 500);
 }
 
 /**
@@ -122,13 +140,133 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Auto-load when dashboard datacenter filter changes
+/**
+ * Open Root Jobs modal
+ */
+function openRootJobsModal() {
+    const modal = document.getElementById('root-jobs-modal');
+    if (modal) {
+        modal.classList.add('active');
+        
+        // Reset modal limit to 10
+        const modalLimit = document.getElementById('root-jobs-modal-limit');
+        if (modalLimit) {
+            modalLimit.value = '10';
+        }
+        
+        // Clear search
+        const searchInput = document.getElementById('root-jobs-search');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        
+        // Load root jobs in modal using dashboard filters
+        const datacenterFilter = document.getElementById('dashboard-datacenter-filter');
+        const folderFilter = document.getElementById('dashboard-folder-filter');
+        const datacenter = datacenterFilter ? (datacenterFilter.value || null) : null;
+        const folder = folderFilter ? (folderFilter.value || null) : null;
+        
+        console.log('Opening modal with filters:', { datacenter, folder });
+        loadTopRootJobs(datacenter, folder, 10, 'root-jobs-modal-list');
+    }
+}
+
+/**
+ * Close Root Jobs modal
+ */
+function closeRootJobsModal() {
+    const modal = document.getElementById('root-jobs-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+/**
+ * Filter root jobs in modal by search term
+ */
+function filterRootJobsInModal(searchTerm) {
+    const rows = document.querySelectorAll('#root-jobs-modal-list table tbody tr');
+    
+    rows.forEach(row => {
+        const jobName = row.querySelector('.job-name-cell')?.textContent.toLowerCase() || '';
+        const folder = row.querySelector('.folder-cell')?.textContent.toLowerCase() || '';
+        
+        if (jobName.includes(searchTerm.toLowerCase()) || folder.includes(searchTerm.toLowerCase())) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Auto-load when dashboard filters change
 document.addEventListener('DOMContentLoaded', () => {
     const datacenterFilter = document.getElementById('dashboard-datacenter-filter');
+    const folderFilter = document.getElementById('dashboard-folder-filter');
+    
+    // Dashboard filter changes
     if (datacenterFilter) {
-        datacenterFilter.addEventListener('change', (e) => {
-            const datacenter = e.target.value;
-            loadTopRootJobs(datacenter || null);
+        datacenterFilter.addEventListener('change', () => {
+            const datacenter = datacenterFilter.value || null;
+            const folder = folderFilter ? folderFilter.value : null;
+            loadTopRootJobs(datacenter, folder, 10, 'root-jobs-list');
+            
+            // Also update modal if it's open
+            const modal = document.getElementById('root-jobs-modal');
+            if (modal && modal.classList.contains('active')) {
+                const modalLimit = document.getElementById('root-jobs-modal-limit');
+                const limit = modalLimit ? parseInt(modalLimit.value) : 10;
+                loadTopRootJobs(datacenter, folder, limit, 'root-jobs-modal-list');
+            }
+        });
+    }
+    
+    if (folderFilter) {
+        folderFilter.addEventListener('change', () => {
+            const datacenter = datacenterFilter ? datacenterFilter.value : null;
+            const folder = folderFilter.value || null;
+            loadTopRootJobs(datacenter, folder, 10, 'root-jobs-list');
+            
+            // Also update modal if it's open
+            const modal = document.getElementById('root-jobs-modal');
+            if (modal && modal.classList.contains('active')) {
+                const modalLimit = document.getElementById('root-jobs-modal-limit');
+                const limit = modalLimit ? parseInt(modalLimit.value) : 10;
+                loadTopRootJobs(datacenter, folder, limit, 'root-jobs-modal-list');
+            }
+        });
+    }
+    
+    // Modal controls
+    const modalLimit = document.getElementById('root-jobs-modal-limit');
+    if (modalLimit) {
+        modalLimit.addEventListener('change', (e) => {
+            // Always read fresh values from dashboard filter elements
+            const dcFilter = document.getElementById('dashboard-datacenter-filter');
+            const fmFilter = document.getElementById('dashboard-folder-filter');
+            const datacenter = dcFilter && dcFilter.value ? dcFilter.value : null;
+            const folder = fmFilter && fmFilter.value ? fmFilter.value : null;
+            const limit = parseInt(e.target.value);
+            console.log('Modal limit changed:', { datacenter, folder, limit });
+            loadTopRootJobs(datacenter, folder, limit, 'root-jobs-modal-list');
+        });
+    }
+    
+    // Modal search
+    const modalSearch = document.getElementById('root-jobs-search');
+    if (modalSearch) {
+        modalSearch.addEventListener('input', (e) => {
+            filterRootJobsInModal(e.target.value);
+        });
+    }
+    
+    // Close modal on background click
+    const modal = document.getElementById('root-jobs-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeRootJobsModal();
+            }
         });
     }
 });
