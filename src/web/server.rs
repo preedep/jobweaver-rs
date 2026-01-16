@@ -104,6 +104,7 @@ pub async fn start_web_server(config: WebConfig) -> std::io::Result<()> {
                             .route("/jobs/{id}/graph/end-to-end", web::get().to(handlers::get_job_graph_end_to_end))
                             .route("/jobs/export", web::post().to(handlers::export_jobs_csv))
                             .route("/dashboard/stats", web::get().to(handlers::get_dashboard_stats))
+                            .route("/dashboard/root-jobs", web::get().to(handlers::get_top_root_jobs))
                             .route("/filters", web::get().to(handlers::get_filter_options))
                     )
             )

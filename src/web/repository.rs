@@ -680,6 +680,73 @@ impl JobRepository {
         Ok(metadata)
     }
 
+    pub fn get_top_root_jobs(&self, limit: u32, datacenter_filter: Option<&str>) -> Result<Vec<RootJobStat>> {
+        let conn = self.conn.lock().unwrap();
+        
+        let datacenter_clause = if let Some(dc) = datacenter_filter {
+            format!("AND j.datacenter = '{}'", dc.replace("'", "''"))
+        } else {
+            String::new()
+        };
+        
+        let query = format!(r#"
+            WITH internal_deps AS (
+                SELECT DISTINCT
+                    j1.id as dependent_job_id,
+                    j2.id as source_job_id,
+                    j1.folder_name,
+                    j1.datacenter
+                FROM jobs j1
+                INNER JOIN in_conditions ic ON j1.id = ic.job_id
+                INNER JOIN out_conditions oc ON ic.condition_name = oc.condition_name 
+                    AND (ic.odate = oc.odate OR (ic.odate IS NULL AND oc.odate IS NULL))
+                INNER JOIN jobs j2 ON oc.job_id = j2.id
+                WHERE j1.folder_name = j2.folder_name 
+                  AND j1.datacenter = j2.datacenter
+                  AND j1.id != j2.id
+            ),
+            root_jobs AS (
+                SELECT DISTINCT
+                    j.id,
+                    j.job_name,
+                    j.folder_name,
+                    j.datacenter
+                FROM jobs j
+                WHERE EXISTS (
+                    SELECT 1 FROM internal_deps WHERE source_job_id = j.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM internal_deps WHERE dependent_job_id = j.id
+                )
+                {}
+            )
+            SELECT 
+                r.id,
+                r.job_name,
+                r.folder_name,
+                r.datacenter,
+                COUNT(DISTINCT d.dependent_job_id) as downstream_count
+            FROM root_jobs r
+            LEFT JOIN internal_deps d ON r.id = d.source_job_id
+            GROUP BY r.id, r.job_name, r.folder_name, r.datacenter
+            ORDER BY downstream_count DESC
+            LIMIT ?
+        "#, datacenter_clause);
+        
+        let mut stmt = conn.prepare(&query)?;
+        let root_jobs = stmt.query_map(params![limit], |row| {
+            Ok(RootJobStat {
+                id: row.get(0)?,
+                job_name: row.get(1)?,
+                folder_name: row.get(2)?,
+                datacenter: row.get(3)?,
+                downstream_count: row.get(4)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(root_jobs)
+    }
+
     pub fn get_dependency_graph(&self, job_id: i64) -> Result<DependencyGraph> {
         let conn = self.conn.lock().unwrap();
         

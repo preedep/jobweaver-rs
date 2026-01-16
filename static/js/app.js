@@ -634,6 +634,11 @@ async function loadDashboard(folderFilter = '', datacenterFilter = '') {
                 makeChartsClickable();
             }
             
+            // Load top root jobs
+            if (typeof loadTopRootJobs === 'function') {
+                loadTopRootJobs(datacenterFilter || null);
+            }
+            
             const endTime = performance.now();
             console.log(`✅ [DASHBOARD] Dashboard loaded in ${(endTime - startTime).toFixed(2)}ms`);
         } else {

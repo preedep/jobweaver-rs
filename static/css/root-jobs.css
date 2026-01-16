@@ -1,0 +1,128 @@
+/* Root Jobs Dashboard Styles */
+
+.root-jobs-container {
+    padding: 0;
+}
+
+.root-jobs-table-wrapper {
+    overflow-x: auto;
+}
+
+.root-jobs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.root-jobs-table thead {
+    background: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.root-jobs-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.root-jobs-table tbody tr {
+    border-bottom: 1px solid #e2e8f0;
+    transition: background-color 0.2s;
+}
+
+.root-jobs-table tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+.root-jobs-table tbody tr.rank-top {
+    background-color: #fef3c7;
+}
+
+.root-jobs-table tbody tr.rank-top:hover {
+    background-color: #fde68a;
+}
+
+.root-jobs-table td {
+    padding: 12px 16px;
+    vertical-align: middle;
+}
+
+.rank-cell {
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.job-name-cell strong {
+    color: #1e293b;
+    font-size: 14px;
+}
+
+.folder-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #e0e7ff;
+    color: #4338ca;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.datacenter-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.datacenter-badge.datacenter-neutron {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.datacenter-badge.datacenter-casio {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.deps-cell {
+    text-align: center;
+}
+
+.deps-count {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #10b981;
+    color: white;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    min-width: 40px;
+    text-align: center;
+}
+
+.actions-cell {
+    text-align: center;
+}
+
+.actions-cell .btn {
+    white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .root-jobs-table {
+        font-size: 12px;
+    }
+    
+    .root-jobs-table th,
+    .root-jobs-table td {
+        padding: 8px 12px;
+    }
+}

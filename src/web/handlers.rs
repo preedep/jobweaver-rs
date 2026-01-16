@@ -260,6 +260,23 @@ pub async fn get_dependency_graph(
     }
 }
 
+/// Get top root jobs with highest downstream dependency counts
+pub async fn get_top_root_jobs(
+    repository: web::Data<Arc<JobRepository>>,
+    datacenter: web::Query<DatacenterFilter>,
+    _auth: BearerAuth,
+) -> HttpResponse {
+    let limit = 10;
+    let datacenter_value = datacenter.datacenter.as_deref();
+    
+    match repository.get_top_root_jobs(limit, datacenter_value) {
+        Ok(root_jobs) => HttpResponse::Ok().json(ApiResponse::success(root_jobs)),
+        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+            format!("Failed to get top root jobs: {}", e)
+        )),
+    }
+}
+
 /// Gets dashboard statistics
 ///
 /// Returns aggregated statistics for the dashboard view.

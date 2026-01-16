@@ -329,6 +329,15 @@ pub struct JobMetadata {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct RootJobStat {
+    pub id: i64,
+    pub job_name: String,
+    pub folder_name: String,
+    pub datacenter: String,
+    pub downstream_count: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DashboardStats {
     pub total_jobs: u32,
     pub total_folders: u32,
