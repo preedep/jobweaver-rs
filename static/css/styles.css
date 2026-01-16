@@ -1060,6 +1060,11 @@ body {
     padding: 20px;
 }
 
+/* Job Detail modal should appear on top of other modals */
+#job-detail-modal {
+    z-index: 1100;
+}
+
 .modal.active {
     display: flex;
 }
