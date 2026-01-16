@@ -227,6 +227,18 @@ function initializeSearchListeners() {
             performSearch();
         });
     }
+    
+    // Add datacenter change listener to reload dependent filters
+    const datacenterFilter = document.getElementById('filter-datacenter');
+    if (datacenterFilter) {
+        $(datacenterFilter).on('change', function() {
+            const selectedDatacenter = $(this).val();
+            console.log(`🔄 [FILTERS] Datacenter changed to: ${selectedDatacenter}, reloading dependent filters...`);
+            
+            // Reload filter options based on selected datacenter
+            loadFilterOptions(selectedDatacenter);
+        });
+    }
 }
 
 /**
@@ -721,16 +733,18 @@ function initializeSelect2() {
 
 /**
  * Loads available filter options from the server
- * Populates dropdown menus with unique values
+ * Populates all filter dropdowns with unique values
  * 
+ * @param {string} datacenter - Optional datacenter to filter options by
  * @returns {Promise<void>}
  */
-async function loadFilterOptions() {
+async function loadFilterOptions(datacenter = '') {
     const startTime = performance.now();
-    console.log('🔧 [FILTERS] Loading filter options...');
+    console.log('🔧 [FILTERS] Loading filter options...', datacenter ? `for datacenter: ${datacenter}` : '');
     
     try {
-        const response = await fetch(`${API_BASE}/filters`, {
+        const url = datacenter ? `${API_BASE}/filters?datacenter=${encodeURIComponent(datacenter)}` : `${API_BASE}/filters`;
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }

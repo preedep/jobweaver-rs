@@ -285,6 +285,11 @@ pub struct DashboardFilter {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct DatacenterFilter {
+    pub datacenter: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DashboardStats {
     pub total_jobs: u32,
     pub total_folders: u32,

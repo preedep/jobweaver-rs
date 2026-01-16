@@ -270,10 +270,12 @@ pub async fn get_dashboard_stats(
 /// Gets available filter options for job search
 ///
 /// Returns lists of unique values for filterable fields.
+/// Optionally filters by datacenter to show only relevant options.
 ///
 /// # Arguments
 ///
-/// * `repository` - Job repository for database access
+/// * `repository` - Repository instance
+/// * `datacenter` - Optional datacenter filter
 /// * `_auth` - Bearer token authentication
 ///
 /// # Returns
@@ -281,9 +283,11 @@ pub async fn get_dashboard_stats(
 /// HTTP 200 with filter options on success, HTTP 500 on error
 pub async fn get_filter_options(
     repository: web::Data<Arc<JobRepository>>,
+    datacenter: web::Query<DatacenterFilter>,
     _auth: BearerAuth,
 ) -> HttpResponse {
-    match repository.get_filter_options() {
+    let datacenter_value = datacenter.datacenter.as_deref();
+    match repository.get_filter_options(datacenter_value) {
         Ok(options) => HttpResponse::Ok().json(ApiResponse::success(options)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
             format!("Failed to get filter options: {}", e)

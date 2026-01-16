@@ -87,18 +87,23 @@ impl JobRepository {
         params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
         request: &JobSearchRequest
     ) {
-        // Datacenter filter
-        self.add_string_filter_owned(where_clauses, params_vec, &request.datacenter, 
-            "EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = ?)", "=", "datacenter");
+        // Datacenter filter - use direct condition since we have LEFT JOIN with folders
+        if let Some(ref datacenter) = request.datacenter {
+            if !datacenter.is_empty() {
+                tracing::debug!("  ➕ Adding datacenter filter: {}", datacenter);
+                where_clauses.push("f.datacenter = ?".to_string());
+                params_vec.push(Box::new(datacenter.clone()));
+            }
+        }
         
         // Folder order method with special "(Empty)" handling
         if let Some(ref folder_order_method) = request.folder_order_method {
             if folder_order_method == "(Empty)" {
                 tracing::debug!("  ➕ Adding folder_order_method filter: (Empty) - searching for NULL or empty");
-                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND (f.folder_order_method IS NULL OR f.folder_order_method = ''))".to_string());
+                where_clauses.push("(f.folder_order_method IS NULL OR f.folder_order_method = '')".to_string());
             } else {
                 tracing::debug!("  ➕ Adding folder_order_method filter: {}", folder_order_method);
-                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.folder_order_method = ?)".to_string());
+                where_clauses.push("f.folder_order_method = ?".to_string());
                 params_vec.push(Box::new(folder_order_method.clone()));
             }
         }
@@ -248,7 +253,7 @@ impl JobRepository {
         where_clause: &str,
         params_vec: &[Box<dyn rusqlite::ToSql>]
     ) -> Result<u32> {
-        let count_query = format!("SELECT COUNT(*) FROM jobs j {}", where_clause);
+        let count_query = format!("SELECT COUNT(*) FROM jobs j LEFT JOIN folders f ON j.folder_name = f.folder_name {}", where_clause);
         tracing::info!("🔢 [COUNT] Executing count query: {}", count_query);
         tracing::debug!("🔢 [COUNT] With {} parameters", params_vec.len());
         
@@ -680,8 +685,8 @@ impl JobRepository {
         
         // Folder order method filter
         match folder_filter {
-            Some("with") => conditions.push("f.folder_order_method IS NOT NULL AND f.folder_order_method != ''".to_string()),
-            Some("without") => conditions.push("f.folder_order_method IS NULL OR f.folder_order_method = ''".to_string()),
+            Some("with") => conditions.push("(f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
+            Some("without") => conditions.push("(f.folder_order_method IS NULL OR f.folder_order_method = '')".to_string()),
             _ => {}
         }
         
@@ -779,45 +784,79 @@ impl JobRepository {
         })
     }
 
-    pub fn get_filter_options(&self) -> Result<FilterOptions> {
+    pub fn get_filter_options(&self, datacenter_filter: Option<&str>) -> Result<FilterOptions> {
         let conn = self.conn.lock().unwrap();
         
-        let mut stmt = conn.prepare("SELECT DISTINCT application FROM jobs WHERE application IS NOT NULL ORDER BY application")?;
+        // Build WHERE clause for datacenter filter
+        let datacenter_condition = if let Some(dc) = datacenter_filter {
+            if !dc.is_empty() {
+                format!("f.datacenter = '{}'", dc.replace("'", "''"))
+            } else {
+                "1=1".to_string()
+            }
+        } else {
+            "1=1".to_string()
+        };
+        
+        tracing::info!("Filter options - datacenter: {:?}, SQL condition: {}", datacenter_filter, datacenter_condition);
+        
+        // Get applications filtered by datacenter
+        let mut stmt = conn.prepare(&format!(
+            "SELECT DISTINCT j.application FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE j.application IS NOT NULL AND {} ORDER BY j.application",
+            datacenter_condition
+        ))?;
         let applications = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT DISTINCT folder_name FROM jobs ORDER BY folder_name")?;
+        // Get folders filtered by datacenter
+        let mut stmt = conn.prepare(&format!(
+            "SELECT DISTINCT j.folder_name FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE {} ORDER BY j.folder_name",
+            datacenter_condition
+        ))?;
         let folders = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT DISTINCT task_type FROM jobs WHERE task_type IS NOT NULL ORDER BY task_type")?;
+        // Get task types filtered by datacenter
+        let mut stmt = conn.prepare(&format!(
+            "SELECT DISTINCT j.task_type FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE j.task_type IS NOT NULL AND {} ORDER BY j.task_type",
+            datacenter_condition
+        ))?;
         let task_types = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
         
-        let appl_type_options: Vec<String> = conn.prepare(
-            "SELECT DISTINCT appl_type FROM jobs WHERE appl_type IS NOT NULL AND appl_type != '' ORDER BY appl_type"
-        )?
+        // Get appl_type filtered by datacenter
+        let appl_type_options: Vec<String> = conn.prepare(&format!(
+            "SELECT DISTINCT j.appl_type FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE j.appl_type IS NOT NULL AND j.appl_type != '' AND {} ORDER BY j.appl_type",
+            datacenter_condition
+        ))?
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
-        let appl_ver_options: Vec<String> = conn.prepare(
-            "SELECT DISTINCT appl_ver FROM jobs WHERE appl_ver IS NOT NULL AND appl_ver != '' ORDER BY appl_ver"
-        )?
+        // Get appl_ver filtered by datacenter
+        let appl_ver_options: Vec<String> = conn.prepare(&format!(
+            "SELECT DISTINCT j.appl_ver FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE j.appl_ver IS NOT NULL AND j.appl_ver != '' AND {} ORDER BY j.appl_ver",
+            datacenter_condition
+        ))?
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
+        // Get all datacenters (not filtered)
         let datacenters: Vec<String> = conn.prepare(
             "SELECT DISTINCT datacenter FROM folders WHERE datacenter IS NOT NULL AND datacenter != '' ORDER BY datacenter"
         )?
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
-        let mut folder_order_methods: Vec<String> = conn.prepare(
-            "SELECT DISTINCT folder_order_method FROM folders WHERE folder_order_method IS NOT NULL AND folder_order_method != '' ORDER BY folder_order_method"
-        )?
+        // Get folder_order_methods filtered by datacenter
+        let mut folder_order_methods: Vec<String> = conn.prepare(&format!(
+            "SELECT DISTINCT f.folder_order_method FROM folders f WHERE f.folder_order_method IS NOT NULL AND f.folder_order_method != '' AND {} ORDER BY f.folder_order_method",
+            datacenter_condition
+        ))?
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
         // Add special "(Empty)" option for folders without folder_order_method
-        let empty_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM folders WHERE folder_order_method IS NULL OR folder_order_method = ''",
+        let empty_count: i64 = conn.query_row(&format!(
+            "SELECT COUNT(*) FROM folders f WHERE (f.folder_order_method IS NULL OR f.folder_order_method = '') AND {}",
+            datacenter_condition
+        ),
             [],
             |row| row.get(0)
         )?;
