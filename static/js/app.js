@@ -585,6 +585,11 @@ async function loadDashboard(filter = '') {
             renderBarChart('chart-applications', stats.jobs_by_application, 'application', 'count');
             renderBarChart('chart-folders', stats.jobs_by_folder, 'folder_name', 'job_count');
             
+            // Make charts clickable for detailed view
+            if (typeof makeChartsClickable === 'function') {
+                makeChartsClickable();
+            }
+            
             const endTime = performance.now();
             console.log(`✅ [DASHBOARD] Dashboard loaded in ${(endTime - startTime).toFixed(2)}ms`);
         } else {
@@ -610,6 +615,15 @@ function renderBarChart(containerId, data, labelKey, valueKey) {
         container.innerHTML = '<p class="text-muted text-center">No data available</p>';
         return;
     }
+    
+    // Store data globally for chart detail modal
+    const chartType = containerId.replace('chart-', '').replace(/-/g, '_');
+    const normalizedData = data.map(item => ({
+        name: item[labelKey],
+        count: item[valueKey],
+        ...item
+    }));
+    window[`chartData_${chartType}`] = normalizedData;
     
     const maxValue = Math.max(...data.map(item => item[valueKey]));
     

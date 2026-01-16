@@ -808,6 +808,83 @@
             </div>
         </div>
 
+        <!-- Chart Detail Modal -->
+        <div id="chart-detail-modal" class="modal">
+            <div class="modal-content modal-content-xlarge">
+                <div class="modal-header">
+                    <div>
+                        <h2 id="chart-modal-title">Chart Details</h2>
+                        <p class="modal-subtitle" id="chart-modal-subtitle"></p>
+                    </div>
+                    <div class="modal-header-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="exportChartData()">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                        <button class="close-modal" onclick="closeChartModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="modal-body chart-modal-body">
+                    <div class="chart-detail-container">
+                        <!-- Left: Enhanced Chart -->
+                        <div class="chart-detail-main">
+                            <div class="chart-controls">
+                                <div class="form-group-modern">
+                                    <label><i class="fas fa-search"></i> Search:</label>
+                                    <input type="text" id="chart-search" class="input-modern" placeholder="Filter items...">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label><i class="fas fa-sort"></i> Sort:</label>
+                                    <select id="chart-sort" class="select-modern">
+                                        <option value="count-desc">Count (High to Low)</option>
+                                        <option value="count-asc">Count (Low to High)</option>
+                                        <option value="name-asc">Name (A to Z)</option>
+                                        <option value="name-desc">Name (Z to A)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label><i class="fas fa-list"></i> Show:</label>
+                                    <select id="chart-limit" class="select-modern">
+                                        <option value="10">Top 10</option>
+                                        <option value="20" selected>Top 20</option>
+                                        <option value="50">Top 50</option>
+                                        <option value="all">All Items</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="chart-detail-canvas" class="chart-detail-canvas"></div>
+                        </div>
+                        
+                        <!-- Right: Statistics Panel -->
+                        <div class="chart-detail-sidebar">
+                            <div class="stats-panel">
+                                <h3><i class="fas fa-chart-bar"></i> Statistics</h3>
+                                <div class="stats-grid" id="chart-stats-grid">
+                                    <!-- Stats will be populated dynamically -->
+                                </div>
+                            </div>
+                            
+                            <div class="stats-panel">
+                                <h3><i class="fas fa-table"></i> Data Table</h3>
+                                <div class="chart-data-table" id="chart-data-table">
+                                    <!-- Table will be populated dynamically -->
+                                </div>
+                            </div>
+                            
+                            <div class="stats-panel" id="chart-insights-panel">
+                                <h3><i class="fas fa-lightbulb"></i> Insights</h3>
+                                <div id="chart-insights">
+                                    <!-- Insights will be populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Loading Overlay -->
         <div id="loading-overlay" class="loading-overlay">
             <div class="spinner-container">
@@ -822,5 +899,6 @@
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="/js/app.js"></script>
     <script src="/js/modal-enhanced.js"></script>
+    <script src="/js/chart-detail.js"></script>
 </body>
 </html>

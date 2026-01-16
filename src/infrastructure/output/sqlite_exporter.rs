@@ -403,9 +403,11 @@ impl SqliteExporter {
             CREATE INDEX IF NOT EXISTS idx_jobs_folder ON jobs(folder_name);
             CREATE INDEX IF NOT EXISTS idx_jobs_application ON jobs(application);
             CREATE INDEX IF NOT EXISTS idx_jobs_critical ON jobs(critical);
+            CREATE INDEX IF NOT EXISTS idx_jobs_cyclic ON jobs(cyclic);
             CREATE INDEX IF NOT EXISTS idx_jobs_appl_type ON jobs(appl_type);
             CREATE INDEX IF NOT EXISTS idx_jobs_appl_ver ON jobs(appl_ver);
             CREATE INDEX IF NOT EXISTS idx_jobs_task_type ON jobs(task_type);
+            CREATE INDEX IF NOT EXISTS idx_jobs_cmdline ON jobs(cmdline);
             CREATE INDEX IF NOT EXISTS idx_jobs_owner ON jobs(owner);
             CREATE INDEX IF NOT EXISTS idx_jobs_jobisn ON jobs(jobisn);
             CREATE INDEX IF NOT EXISTS idx_jobs_group ON jobs(job_group);
