@@ -2446,12 +2446,33 @@ body {
     background: #f8fafc;
     border-radius: 6px;
     border: 1px solid #e2e8f0;
+    position: relative;
+    cursor: help;
+    transition: all 0.2s ease;
+}
+
+.stat-item:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+}
+
+.stat-item:hover .fa-info-circle {
+    color: #3b82f6;
 }
 
 .stat-item-label {
     font-size: 13px;
     color: #64748b;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.stat-info-icon {
+    font-size: 11px;
+    color: #94a3b8;
+    transition: color 0.2s ease;
 }
 
 .stat-item-value {

@@ -616,7 +616,7 @@ function renderBarChart(containerId, data, labelKey, valueKey) {
         return;
     }
     
-    // Store data globally for chart detail modal
+    // Store ALL data globally for chart detail modal (up to 50 items)
     const chartType = containerId.replace('chart-', '').replace(/-/g, '_');
     const normalizedData = data.map(item => ({
         name: item[labelKey],
@@ -625,9 +625,11 @@ function renderBarChart(containerId, data, labelKey, valueKey) {
     }));
     window[`chartData_${chartType}`] = normalizedData;
     
-    const maxValue = Math.max(...data.map(item => item[valueKey]));
+    // Display only Top 10 on dashboard
+    const displayData = data.slice(0, 10);
+    const maxValue = Math.max(...displayData.map(item => item[valueKey]));
     
-    container.innerHTML = data.map(item => {
+    container.innerHTML = displayData.map(item => {
         const percentage = (item[valueKey] / maxValue) * 100;
         return `
             <div class="chart-bar">

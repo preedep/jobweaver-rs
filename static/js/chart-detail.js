@@ -21,17 +21,21 @@ function openChartDetail(chartType, data, title, subtitle) {
     document.getElementById('chart-modal-title').textContent = title;
     document.getElementById('chart-modal-subtitle').textContent = subtitle;
     
-    // Render initial chart with default settings
-    renderDetailedChart(data, chartType);
+    // Apply default limit of 10 items
+    const defaultLimit = 10;
+    const displayData = data.slice(0, defaultLimit);
+    
+    // Render initial chart with default settings (Top 10)
+    renderDetailedChart(displayData, chartType);
     
     // Render statistics
-    renderChartStatistics(data, chartType);
+    renderChartStatistics(displayData, chartType);
     
     // Render data table
-    renderChartDataTable(data, chartType);
+    renderChartDataTable(displayData, chartType);
     
     // Render insights
-    renderChartInsights(data, chartType);
+    renderChartInsights(displayData, chartType);
     
     // Show modal
     document.getElementById('chart-detail-modal').classList.add('active');
@@ -313,7 +317,7 @@ function renderChartStatistics(data, chartType) {
         <div class="stat-item" title="${stat.tooltip}">
             <span class="stat-item-label">
                 ${stat.label}
-                <i class="fas fa-info-circle" style="font-size: 11px; color: #94a3b8; margin-left: 4px;"></i>
+                <i class="fas fa-info-circle stat-info-icon"></i>
             </span>
             <span class="stat-item-value ${stat.class}">${stat.value}</span>
         </div>

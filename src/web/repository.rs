@@ -717,7 +717,7 @@ impl JobRepository {
             |row| row.get(0)
         )?;
         
-        let mut stmt = conn.prepare(&format!("SELECT j.application, COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE j.application IS NOT NULL AND {} GROUP BY j.application ORDER BY count DESC LIMIT 10", folder_filter))?;
+        let mut stmt = conn.prepare(&format!("SELECT j.application, COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE j.application IS NOT NULL AND {} GROUP BY j.application ORDER BY count DESC LIMIT 50", folder_filter))?;
         let jobs_by_application = stmt.query_map([], |row| {
             Ok(ApplicationStat {
                 application: row.get(0)?,
@@ -725,7 +725,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare(&format!("SELECT j.folder_name, COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {} GROUP BY j.folder_name ORDER BY count DESC LIMIT 10", folder_filter))?;
+        let mut stmt = conn.prepare(&format!("SELECT j.folder_name, COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {} GROUP BY j.folder_name ORDER BY count DESC LIMIT 50", folder_filter))?;
         let jobs_by_folder = stmt.query_map([], |row| {
             Ok(FolderStat {
                 folder_name: row.get(0)?,
