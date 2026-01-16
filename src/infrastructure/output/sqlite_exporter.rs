@@ -263,8 +263,7 @@ impl SqliteExporter {
                 fprocs TEXT,
                 tpgms TEXT,
                 tprocs TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(job_name, folder_name)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
             -- Job scheduling table with all scheduling attributes
@@ -423,6 +422,7 @@ impl SqliteExporter {
             
             -- Job name search
             CREATE INDEX IF NOT EXISTS idx_jobs_name ON jobs(job_name);
+            CREATE INDEX IF NOT EXISTS idx_jobs_name_folder ON jobs(job_name, folder_name);
             
             -- Foreign key indexes for all child tables
             CREATE INDEX IF NOT EXISTS idx_in_conditions_job ON in_conditions(job_id);
@@ -507,7 +507,7 @@ impl SqliteExporter {
 
         tx.execute(
             r#"
-            INSERT OR REPLACE INTO folders 
+            INSERT INTO folders 
             (folder_name, folder_type, datacenter, application, description, owner,
              version, platform, table_name, folder_dsn, table_dsn, modified,
              last_upload, folder_order_method, table_userdaily, real_folder_id,
@@ -578,7 +578,7 @@ impl SqliteExporter {
         
         tx.prepare_cached(
             r#"
-            INSERT OR REPLACE INTO jobs (
+            INSERT INTO jobs (
                 job_name, folder_name, application, sub_application, appl_type, appl_ver,
                 description, owner, run_as, priority, critical, task_type, cyclic,
                 node_id, cmdline, jobisn, job_group, memname, author, doclib, docmem,

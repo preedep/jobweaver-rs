@@ -80,6 +80,9 @@ impl ControlMXmlParser {
     /// cause XML parsing to fail. This method filters them out while
     /// preserving valid whitespace.
     ///
+    /// According to XML 1.0 spec, valid characters are:
+    /// - #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
+    ///
     /// # Arguments
     ///
     /// * `xml` - Raw XML string to sanitize
@@ -90,10 +93,14 @@ impl ControlMXmlParser {
     fn sanitize_xml(&self, xml: &str) -> String {
         xml.chars()
             .filter(|&c| {
-                // Keep valid XML characters:
-                // - Tab (0x09), LF (0x0A), CR (0x0D)
-                // - Printable ASCII and Unicode (>= 0x20)
-                c == '\t' || c == '\n' || c == '\r' || c >= ' '
+                let code = c as u32;
+                // Valid XML 1.0 characters
+                code == 0x09      // Tab
+                || code == 0x0A   // Line Feed
+                || code == 0x0D   // Carriage Return
+                || (code >= 0x20 && code <= 0xD7FF)
+                || (code >= 0xE000 && code <= 0xFFFD)
+                || (code >= 0x10000 && code <= 0x10FFFF)
             })
             .collect()
     }
