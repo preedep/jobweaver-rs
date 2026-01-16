@@ -1575,11 +1575,7 @@ function renderJobGraph(graphData, mode = 'direct') {
             zoomView: true,
             hover: true,
             tooltipDelay: 100,
-            navigationButtons: false,
-            tooltip: {
-                enabled: true,
-                delay: 100
-            }
+            navigationButtons: false
         },
         nodes: {
             shape: 'box',
