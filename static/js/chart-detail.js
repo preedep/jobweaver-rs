@@ -313,15 +313,43 @@ function renderChartStatistics(data, chartType) {
         });
     }
     
-    statsGrid.innerHTML = stats.map(stat => `
-        <div class="stat-item" title="${stat.tooltip}">
+    statsGrid.innerHTML = stats.map((stat, index) => `
+        <div class="stat-item" data-stat-index="${index}">
             <span class="stat-item-label">
                 ${stat.label}
-                <i class="fas fa-info-circle stat-info-icon"></i>
+                <i class="fas fa-info-circle stat-info-icon" data-tooltip-trigger="${index}"></i>
             </span>
             <span class="stat-item-value ${stat.class}">${stat.value}</span>
+            <div class="stat-tooltip" data-tooltip="${index}">${stat.tooltip}</div>
         </div>
     `).join('');
+    
+    // Add click event listeners to info icons
+    stats.forEach((stat, index) => {
+        const icon = statsGrid.querySelector(`[data-tooltip-trigger="${index}"]`);
+        const tooltip = statsGrid.querySelector(`[data-tooltip="${index}"]`);
+        
+        if (icon && tooltip) {
+            icon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                // Hide all other tooltips
+                document.querySelectorAll('.stat-tooltip.show').forEach(t => {
+                    if (t !== tooltip) t.classList.remove('show');
+                });
+                
+                // Toggle this tooltip
+                tooltip.classList.toggle('show');
+            });
+        }
+    });
+    
+    // Close tooltip when clicking outside
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.stat-tooltip.show').forEach(t => {
+            t.classList.remove('show');
+        });
+    });
 }
 
 /**

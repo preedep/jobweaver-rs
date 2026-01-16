@@ -2447,7 +2447,6 @@ body {
     border-radius: 6px;
     border: 1px solid #e2e8f0;
     position: relative;
-    cursor: help;
     transition: all 0.2s ease;
 }
 
@@ -2460,6 +2459,42 @@ body {
     color: #3b82f6;
 }
 
+/* Custom Tooltip */
+.stat-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    background: #1e293b;
+    color: white;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.stat-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #1e293b;
+}
+
+.stat-item:hover .stat-tooltip,
+.stat-tooltip.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-4px);
+}
+
 .stat-item-label {
     font-size: 13px;
     color: #64748b;
@@ -2470,9 +2505,15 @@ body {
 }
 
 .stat-info-icon {
-    font-size: 11px;
+    font-size: 12px;
     color: #94a3b8;
+    cursor: pointer;
     transition: color 0.2s ease;
+    padding: 2px;
+}
+
+.stat-info-icon:hover {
+    color: #3b82f6;
 }
 
 .stat-item-value {
