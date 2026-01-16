@@ -234,8 +234,13 @@ function initializeSearchListeners() {
  */
 function initializeTableListeners() {
     document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
-        th.addEventListener('click', () => {
-            handleTableSort(th.dataset.sort);
+        // Remove old listener by cloning and replacing the element
+        const newTh = th.cloneNode(true);
+        th.parentNode.replaceChild(newTh, th);
+        
+        // Add new listener
+        newTh.addEventListener('click', () => {
+            handleTableSort(newTh.dataset.sort);
         });
     });
 }
@@ -253,7 +258,32 @@ function handleTableSort(sortBy) {
         currentSort.by = sortBy;
         currentSort.order = 'asc';
     }
+    
+    // Update sort icons
+    updateSortIcons(sortBy, currentSort.order);
+    
     performSearch();
+}
+
+/**
+ * Updates sort icons in table headers to show current sort state
+ * 
+ * @param {string} sortBy - Column being sorted
+ * @param {string} order - Sort order ('asc' or 'desc')
+ */
+function updateSortIcons(sortBy, order) {
+    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
+        const icon = th.querySelector('i');
+        if (!icon) return;
+        
+        if (th.dataset.sort === sortBy) {
+            // Update icon for active sort column
+            icon.className = order === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+        } else {
+            // Reset icon for other columns
+            icon.className = 'fas fa-sort';
+        }
+    });
 }
 
 /**
@@ -905,6 +935,10 @@ function renderJobsTable(data) {
     tbody.innerHTML = data.jobs.map(renderJobRow).join('');
     updateResultsInfo(data);
     renderPagination(data);
+    
+    // Re-attach sorting event listeners to table headers
+    initializeTableListeners();
+    
     console.log('[TABLE] Table rendered successfully');
 }
 
