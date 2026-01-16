@@ -12,8 +12,8 @@ async function loadTopRootJobs(datacenter = null, folderFilter = null, limit = 1
     
     console.log('loadTopRootJobs called with:', { datacenter, folderFilter, limit, containerId });
     
-    // Show loading
-    container.innerHTML = '<div class="loading-state"><i class="fas fa-spinner fa-spin"></i> Loading root jobs...</div>';
+    // Show skeleton loading
+    showSkeletonTable(containerId, Math.min(limit, 10));
     
     try {
         const params = new URLSearchParams();
@@ -33,13 +33,19 @@ async function loadTopRootJobs(datacenter = null, folderFilter = null, limit = 1
         const result = await response.json();
         
         if (result.success && result.data) {
-            renderRootJobsList(result.data, containerId);
+            // Small delay for smooth transition
+            setTimeout(() => {
+                renderRootJobsList(result.data, containerId);
+                // Add smooth appear animation
+                const tableWrapper = container.querySelector('.root-jobs-table-wrapper');
+                if (tableWrapper) smoothAppear(tableWrapper);
+            }, 150);
         } else {
-            container.innerHTML = '<div class="error">Failed to load root jobs</div>';
+            container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Failed to load root jobs</div></div>';
         }
     } catch (error) {
         console.error('Error loading root jobs:', error);
-        container.innerHTML = '<div class="error">Error loading root jobs</div>';
+        container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Error loading root jobs</div><div class="placeholder-subtext">Please try again</div></div>';
     }
 }
 

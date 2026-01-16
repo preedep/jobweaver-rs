@@ -573,6 +573,15 @@ async function loadDashboard(folderFilter = '', datacenterFilter = '') {
     const startTime = performance.now();
     console.log('📊 [DASHBOARD] Loading dashboard statistics...');
     
+    // Show loading state for charts
+    const chartContainers = ['chart-appl-types', 'chart-task-types', 'chart-applications', 'chart-folders'];
+    chartContainers.forEach(id => {
+        const container = document.getElementById(id);
+        if (container) {
+            container.innerHTML = '<div class="skeleton skeleton-chart"></div>';
+        }
+    });
+    
     try {
         const fetchStart = performance.now();
         

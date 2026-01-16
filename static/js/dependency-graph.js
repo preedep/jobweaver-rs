@@ -62,8 +62,8 @@ async function loadDependencyGraph(jobId) {
     const container = document.getElementById('dependency-graph-container');
     if (!container) return;
     
-    // Show loading
-    container.innerHTML = '<div class="loading" style="display: flex; align-items: center; justify-content: center; height: 100%;"><i class="fas fa-spinner fa-spin"></i> Loading dependency graph...</div>';
+    // Show professional loading state
+    showSpinner('dependency-graph-container', 'Loading dependency graph...');
     
     try {
         const response = await fetch(`${API_BASE}/jobs/${jobId}/dependencies`, {
@@ -76,15 +76,22 @@ async function loadDependencyGraph(jobId) {
         
         if (result.success) {
             currentGraphData = result.data;
-            renderDependencyGraph(currentGraphData, currentFilter, currentDepth, currentViewMode);
-            updateDependencyStats(currentGraphData.stats);
-            initializeGraphControls();
+            
+            // Small delay for smooth transition
+            setTimeout(() => {
+                renderDependencyGraph(currentGraphData, currentFilter, currentDepth, currentViewMode);
+                updateDependencyStats(currentGraphData.stats);
+                initializeGraphControls();
+                
+                // Add smooth appear animation
+                smoothAppear(container);
+            }, 150);
         } else {
-            container.innerHTML = '<div class="error">Failed to load dependency graph</div>';
+            container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Failed to load dependency graph</div></div>';
         }
     } catch (error) {
         console.error('Error loading dependency graph:', error);
-        container.innerHTML = '<div class="error">Error loading dependency graph</div>';
+        container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Error loading dependency graph</div><div class="placeholder-subtext">Please try again</div></div>';
     }
 }
 
