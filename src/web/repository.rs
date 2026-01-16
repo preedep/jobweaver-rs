@@ -473,7 +473,7 @@ impl JobRepository {
             r#"
             SELECT 
                 j.id, j.job_name, j.folder_name,
-                f.datacenter, f.folder_order_method,
+                j.datacenter, f.folder_order_method,
                 j.application, j.sub_application,
                 COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
@@ -505,7 +505,7 @@ impl JobRepository {
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id)
             FROM jobs j
-            LEFT JOIN folders f ON j.folder_name = f.folder_name
+            LEFT JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
             WHERE j.id = ?
             "#,
             params![job_id],
