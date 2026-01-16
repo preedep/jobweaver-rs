@@ -218,12 +218,18 @@ function initializeSearchListeners() {
     const exportBtn = document.getElementById('export-csv-btn');
     const perPageSelect = document.getElementById('per-page');
     
-    if (searchBtn) searchBtn.addEventListener('click', performSearch);
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            currentPage = 1; // Reset to page 1 when search criteria changes
+            performSearch();
+        });
+    }
     if (resetBtn) resetBtn.addEventListener('click', resetFilters);
     if (exportBtn) exportBtn.addEventListener('click', exportToCSV);
     if (perPageSelect) {
         perPageSelect.addEventListener('change', (e) => {
             currentPerPage = parseInt(e.target.value);
+            currentPage = 1; // Reset to page 1 when changing items per page
             performSearch();
         });
     }
