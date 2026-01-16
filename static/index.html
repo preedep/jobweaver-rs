@@ -107,7 +107,15 @@
                             <i class="fas fa-filter"></i>
                             <h3>View Options</h3>
                         </div>
-                        <div class="filter-card-actions">
+                        <div class="filter-card-actions" style="display: flex; gap: 24px;">
+                            <div class="form-group-modern" style="margin: 0; display: flex; align-items: center; gap: 12px;">
+                                <label for="dashboard-datacenter-filter" style="margin: 0; font-weight: 500; color: #64748b;">
+                                    <i class="fas fa-server"></i> Datacenter:
+                                </label>
+                                <select id="dashboard-datacenter-filter" class="select-modern" style="min-width: 200px;">
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                            </div>
                             <div class="form-group-modern" style="margin: 0; display: flex; align-items: center; gap: 12px;">
                                 <label for="dashboard-folder-filter" style="margin: 0; font-weight: 500; color: #64748b;">
                                     <i class="fas fa-sort"></i> Folder Order Method:
@@ -370,7 +378,7 @@
                                         <i class="fas fa-server"></i> Datacenter
                                     </label>
                                     <select id="filter-datacenter" class="select2-dropdown select-modern">
-                                        <option value="">All Datacenters</option>
+                                        <!-- Options will be populated dynamically, no 'All' option -->
                                     </select>
                                 </div>
                                 <div class="form-group-modern">

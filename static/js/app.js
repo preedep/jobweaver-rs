@@ -338,25 +338,44 @@ function closeAllModals() {
  * Initializes dashboard filter event listeners
  */
 function initializeDashboardListeners() {
-    const dashboardFilter = document.getElementById('dashboard-folder-filter');
     console.log('📊 [DASHBOARD] Initializing dashboard listeners...');
-    console.log('📊 [DASHBOARD] Filter element found:', dashboardFilter);
     
-    if (dashboardFilter) {
-        // Remove any existing listener to prevent duplicates
-        const newFilter = dashboardFilter.cloneNode(true);
-        dashboardFilter.parentNode.replaceChild(newFilter, dashboardFilter);
+    const datacenterFilter = document.getElementById('dashboard-datacenter-filter');
+    const folderFilter = document.getElementById('dashboard-folder-filter');
+    
+    // Setup datacenter filter
+    if (datacenterFilter) {
+        const newDatacenterFilter = datacenterFilter.cloneNode(true);
+        datacenterFilter.parentNode.replaceChild(newDatacenterFilter, datacenterFilter);
         
-        // Add the event listener to the new element
-        newFilter.addEventListener('change', (e) => {
-            const filterValue = e.target.value;
-            console.log(`📊 [DASHBOARD] Filter changed to: ${filterValue || 'All Jobs'}`);
-            loadDashboard(filterValue);
+        newDatacenterFilter.addEventListener('change', () => {
+            console.log(`📊 [DASHBOARD] Datacenter filter changed to: ${newDatacenterFilter.value}`);
+            loadDashboardWithFilters();
         });
-        console.log('📊 [DASHBOARD] Event listener attached successfully');
-    } else {
-        console.warn('📊 [DASHBOARD] Filter element not found - will retry when dashboard page is shown');
     }
+    
+    // Setup folder order method filter
+    if (folderFilter) {
+        const newFolderFilter = folderFilter.cloneNode(true);
+        folderFilter.parentNode.replaceChild(newFolderFilter, folderFilter);
+        
+        newFolderFilter.addEventListener('change', () => {
+            console.log(`📊 [DASHBOARD] Folder filter changed to: ${newFolderFilter.value || 'All Jobs'}`);
+            loadDashboardWithFilters();
+        });
+    }
+    
+    console.log('📊 [DASHBOARD] Event listeners attached successfully');
+}
+
+/**
+ * Loads dashboard with current filter values
+ */
+function loadDashboardWithFilters() {
+    const datacenter = document.getElementById('dashboard-datacenter-filter')?.value || '';
+    const folderMethod = document.getElementById('dashboard-folder-filter')?.value || '';
+    
+    loadDashboard(folderMethod, datacenter);
 }
 
 /**
@@ -513,6 +532,7 @@ function switchContentPage(page) {
     if (pageElement) pageElement.classList.add('active');
     
     if (page === 'dashboard') {
+        loadFilterOptions(); // Load filter options to populate datacenter dropdown
         initializeDashboardListeners(); // Re-attach event listener
         loadDashboard();
     } else if (page === 'jobs') {
@@ -531,13 +551,19 @@ function switchContentPage(page) {
  * 
  * @returns {Promise<void>}
  */
-async function loadDashboard(filter = '') {
+async function loadDashboard(folderFilter = '', datacenterFilter = '') {
     const startTime = performance.now();
     console.log('📊 [DASHBOARD] Loading dashboard statistics...');
     
     try {
         const fetchStart = performance.now();
-        const url = filter ? `${API_BASE}/dashboard/stats?folder_order_method_filter=${filter}` : `${API_BASE}/dashboard/stats`;
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (folderFilter) params.append('folder_order_method_filter', folderFilter);
+        if (datacenterFilter) params.append('datacenter', datacenterFilter);
+        
+        const url = params.toString() ? `${API_BASE}/dashboard/stats?${params.toString()}` : `${API_BASE}/dashboard/stats`;
         const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -730,8 +756,11 @@ async function loadFilterOptions() {
             populateSelect('filter-appl-type', options.appl_types);
             populateSelect('filter-appl-ver', options.appl_vers);
             populateSelect('filter-task-type', options.task_types);
-            populateSelect('filter-datacenter', options.datacenters);
+            populateSelect('filter-datacenter', options.datacenters, false); // No "All" option
             populateSelect('filter-folder-order-method', options.folder_order_methods);
+            
+            // Populate dashboard datacenter filter (no "All" option)
+            populateDashboardDatacenterFilter(options.datacenters);
             
             console.log('🔍 [FILTERS] Initializing Select2...');
             initializeSelect2();
@@ -745,20 +774,65 @@ async function loadFilterOptions() {
 }
 
 /**
+ * Populates dashboard datacenter filter (no "All" option)
+ * 
+ * @param {Array<string>} datacenters - Array of datacenter values
+ */
+function populateDashboardDatacenterFilter(datacenters) {
+    const select = document.getElementById('dashboard-datacenter-filter');
+    if (!select) {
+        console.warn('📊 [DASHBOARD] Datacenter filter element not found');
+        return;
+    }
+    
+    if (datacenters.length === 0) {
+        console.warn('📊 [DASHBOARD] No datacenters available to populate');
+        return;
+    }
+    
+    select.innerHTML = '';
+    
+    datacenters.forEach(datacenter => {
+        const opt = document.createElement('option');
+        opt.value = datacenter;
+        opt.textContent = datacenter;
+        select.appendChild(opt);
+    });
+    
+    // Auto-select first datacenter
+    select.value = datacenters[0];
+    
+    console.log(`📊 [DASHBOARD] Datacenter filter populated with ${datacenters.length} options, selected: ${datacenters[0]}`);
+    
+    // Trigger initial load with selected datacenter
+    setTimeout(() => {
+        loadDashboardWithFilters();
+    }, 100);
+}
+
+/**
  * Populates a select dropdown with options
  * 
  * @param {string} selectId - ID of the select element
  * @param {Array<string>} options - Array of option values
+ * @param {boolean} keepAllOption - Whether to keep the "All" option (default: true)
  */
-function populateSelect(selectId, options) {
+function populateSelect(selectId, options, keepAllOption = true) {
     const select = document.getElementById(selectId);
     const currentValue = select.value;
     
-    // Keep first option (All)
-    const firstOption = select.options[0];
+    // Clear select
     select.innerHTML = '';
-    select.appendChild(firstOption);
     
+    // Keep first option (All) if specified
+    if (keepAllOption && select.options.length > 0) {
+        const firstOption = document.createElement('option');
+        firstOption.value = '';
+        firstOption.textContent = select.getAttribute('data-all-text') || 'All';
+        select.appendChild(firstOption);
+    }
+    
+    // Add options
     options.forEach(option => {
         const opt = document.createElement('option');
         opt.value = option;
@@ -766,7 +840,14 @@ function populateSelect(selectId, options) {
         select.appendChild(opt);
     });
     
-    select.value = currentValue;
+    // Set value: restore previous or select first non-empty option
+    if (currentValue && options.includes(currentValue)) {
+        select.value = currentValue;
+    } else if (!keepAllOption && options.length > 0) {
+        select.value = options[0]; // Auto-select first value when no "All" option
+    } else {
+        select.value = currentValue;
+    }
 }
 
 /**

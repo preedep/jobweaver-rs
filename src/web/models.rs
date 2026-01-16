@@ -281,6 +281,7 @@ pub struct Variable {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DashboardFilter {
     pub folder_order_method_filter: Option<String>,
+    pub datacenter: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

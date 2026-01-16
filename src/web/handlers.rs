@@ -257,8 +257,9 @@ pub async fn get_dashboard_stats(
     filter: web::Query<DashboardFilter>,
     _auth: BearerAuth,
 ) -> HttpResponse {
-    let filter_value = filter.folder_order_method_filter.as_deref();
-    match repository.get_dashboard_stats(filter_value) {
+    let folder_filter = filter.folder_order_method_filter.as_deref();
+    let datacenter_filter = filter.datacenter.as_deref();
+    match repository.get_dashboard_stats(folder_filter, datacenter_filter) {
         Ok(stats) => HttpResponse::Ok().json(ApiResponse::success(stats)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
             format!("Failed to get dashboard stats: {}", e)

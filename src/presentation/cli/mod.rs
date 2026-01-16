@@ -32,8 +32,8 @@ pub enum Commands {
 
     #[command(about = "Export Control-M XML raw data to SQLite database")]
     ExportSqlite {
-        #[arg(short, long, value_name = "FILE", help = "Input Control-M XML file")]
-        input: PathBuf,
+        #[arg(short, long, value_name = "FILES", help = "Input Control-M XML file(s) - comma-separated for multiple files (e.g., file1.xml,file2.xml)")]
+        input: String,
 
         #[arg(short, long, value_name = "FILE", default_value = "controlm.db", help = "Output SQLite database file")]
         output: PathBuf,
