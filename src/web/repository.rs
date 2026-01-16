@@ -503,7 +503,8 @@ impl JobRepository {
                 (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM on_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id),
-                (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id)
+                (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id),
+                0 as total_dependencies_e2e
             FROM jobs j
             LEFT JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
             WHERE j.id = ?
