@@ -434,14 +434,39 @@ impl ExportSqliteCommand {
             let folders = parser.parse_file(Path::new(file_path))
                 .with_context(|| format!("Failed to parse XML file: {}", file_path))?;
             
-            info!("  → Found {} folders in {}", folders.len(), file_path);
+            // Count jobs and datacenters in this file
+            let file_jobs: usize = folders.iter().map(|f| f.total_jobs()).sum();
+            let mut datacenter_stats: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            for folder in &folders {
+                let dc = folder.datacenter.clone().unwrap_or_else(|| "(unknown)".to_string());
+                *datacenter_stats.entry(dc).or_insert(0) += folder.total_jobs();
+            }
+            
+            info!("  → Found {} folders, {} jobs in {}", folders.len(), file_jobs, file_path);
+            for (dc, count) in datacenter_stats.iter() {
+                info!("     • Datacenter '{}': {} jobs", dc, count);
+            }
+            
             all_folders.extend(folders);
         }
         
         spinner.finish_with_message(format!("✓ Parsed {} file(s), found {} total folders", file_paths.len(), all_folders.len()));
         
+        // Calculate total statistics across all files
         let total_jobs: usize = all_folders.iter().map(|f| f.total_jobs()).sum();
-        info!("Total jobs across all files: {}", total_jobs);
+        let mut total_datacenter_stats: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for folder in &all_folders {
+            let dc = folder.datacenter.clone().unwrap_or_else(|| "(unknown)".to_string());
+            *total_datacenter_stats.entry(dc).or_insert(0) += folder.total_jobs();
+        }
+        
+        info!("📊 TOTAL SUMMARY across {} file(s):", file_paths.len());
+        info!("  → Total folders: {}", all_folders.len());
+        info!("  → Total jobs: {}", total_jobs);
+        info!("  → Jobs by datacenter:");
+        for (dc, count) in total_datacenter_stats.iter() {
+            info!("     • '{}': {} jobs", dc, count);
+        }
 
         if total_jobs == 0 {
             warn!("No jobs found in the XML file");

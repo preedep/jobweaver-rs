@@ -87,11 +87,11 @@ impl JobRepository {
         params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
         request: &JobSearchRequest
     ) {
-        // Datacenter filter - use direct condition since we have LEFT JOIN with folders
+        // Datacenter filter - use datacenter column from jobs table
         if let Some(ref datacenter) = request.datacenter {
             if !datacenter.is_empty() {
                 tracing::debug!("  ➕ Adding datacenter filter: {}", datacenter);
-                where_clauses.push("f.datacenter = ?".to_string());
+                where_clauses.push("j.datacenter = ?".to_string());
                 params_vec.push(Box::new(datacenter.clone()));
             }
         }
@@ -253,7 +253,7 @@ impl JobRepository {
         where_clause: &str,
         params_vec: &[Box<dyn rusqlite::ToSql>]
     ) -> Result<u32> {
-        let count_query = format!("SELECT COUNT(*) FROM jobs j LEFT JOIN folders f ON j.folder_name = f.folder_name {}", where_clause);
+        let count_query = format!("SELECT COUNT(*) FROM jobs j LEFT JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter {}", where_clause);
         tracing::info!("🔢 [COUNT] Executing count query: {}", count_query);
         tracing::debug!("🔢 [COUNT] With {} parameters", params_vec.len());
         
@@ -286,7 +286,7 @@ impl JobRepository {
             r#"
             SELECT 
                 j.id, j.job_name, j.folder_name,
-                f.datacenter, f.folder_order_method,
+                j.datacenter, f.folder_order_method,
                 j.application, j.sub_application,
                 COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
@@ -319,7 +319,7 @@ impl JobRepository {
                 (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) as var_count,
                 0 as total_dependencies_e2e
             FROM jobs j
-            LEFT JOIN folders f ON j.folder_name = f.folder_name
+            LEFT JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
             {}
             ORDER BY {} {}
             LIMIT ? OFFSET ?
@@ -683,17 +683,17 @@ impl JobRepository {
         // Build WHERE clause based on filters
         let mut conditions = Vec::new();
         
-        // Folder order method filter
+        // Folder order method filter - need to join with folders table
         match folder_filter {
-            Some("with") => conditions.push("(f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
-            Some("without") => conditions.push("(f.folder_order_method IS NULL OR f.folder_order_method = '')".to_string()),
+            Some("with") => conditions.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = jobs.folder_name AND f.datacenter = jobs.datacenter AND f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
+            Some("without") => conditions.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = jobs.folder_name AND f.datacenter = jobs.datacenter AND (f.folder_order_method IS NULL OR f.folder_order_method = ''))".to_string()),
             _ => {}
         }
         
-        // Datacenter filter
+        // Datacenter filter - use datacenter column from jobs table
         if let Some(dc) = datacenter_filter {
             if !dc.is_empty() {
-                conditions.push(format!("f.datacenter = '{}'", dc.replace("'", "''")));
+                conditions.push(format!("datacenter = '{}'", dc.replace("'", "''")));
             }
         }
         
@@ -706,39 +706,39 @@ impl JobRepository {
         tracing::info!("Dashboard stats - folder_filter: {:?}, datacenter: {:?}, SQL: {}", folder_filter, datacenter_filter, where_clause);
         
         let total_jobs: u32 = conn.query_row(
-            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {}", where_clause),
+            &format!("SELECT COUNT(*) FROM jobs WHERE {}", where_clause),
             [],
             |row| row.get(0)
         )?;
         let total_folders: u32 = conn.query_row(
-            &format!("SELECT COUNT(DISTINCT j.folder_name) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {}", where_clause),
+            &format!("SELECT COUNT(DISTINCT folder_name) FROM jobs WHERE {}", where_clause),
             [],
             |row| row.get(0)
         )?;
         let critical_jobs: u32 = conn.query_row(
-            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE j.critical = 1 AND ({})", where_clause),
+            &format!("SELECT COUNT(*) FROM jobs WHERE critical = 1 AND ({})", where_clause),
             [],
             |row| row.get(0)
         )?;
         let cyclic_jobs: u32 = conn.query_row(
-            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE j.cyclic = 1 AND ({})", where_clause),
+            &format!("SELECT COUNT(*) FROM jobs WHERE cyclic = 1 AND ({})", where_clause),
             [],
             |row| row.get(0)
         )?;
         
         let file_transfer_jobs: u32 = conn.query_row(
-            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE (j.appl_type = 'FILE_TRANS' OR j.appl_type = 'FileWatch') AND ({})", where_clause),
+            &format!("SELECT COUNT(*) FROM jobs WHERE (appl_type = 'FILE_TRANS' OR appl_type = 'FileWatch') AND ({})", where_clause),
             [],
             |row| row.get(0)
         )?;
         
         let cli_jobs: u32 = conn.query_row(
-            &format!("SELECT COUNT(*) FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE (j.task_type = 'Command' OR j.task_type = 'Script' OR j.cmdline IS NOT NULL) AND ({})", where_clause),
+            &format!("SELECT COUNT(*) FROM jobs WHERE (task_type = 'Command' OR task_type = 'Script' OR cmdline IS NOT NULL) AND ({})", where_clause),
             [],
             |row| row.get(0)
         )?;
         
-        let mut stmt = conn.prepare(&format!("SELECT j.application, COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE j.application IS NOT NULL AND ({}) GROUP BY j.application ORDER BY count DESC LIMIT 50", where_clause))?;
+        let mut stmt = conn.prepare(&format!("SELECT application, COUNT(*) as count FROM jobs WHERE application IS NOT NULL AND ({}) GROUP BY application ORDER BY count DESC LIMIT 50", where_clause))?;
         let jobs_by_application = stmt.query_map([], |row| {
             Ok(ApplicationStat {
                 application: row.get(0)?,
@@ -746,7 +746,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare(&format!("SELECT j.folder_name, COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {} GROUP BY j.folder_name ORDER BY count DESC LIMIT 50", where_clause))?;
+        let mut stmt = conn.prepare(&format!("SELECT folder_name, COUNT(*) as count FROM jobs WHERE {} GROUP BY folder_name ORDER BY count DESC LIMIT 50", where_clause))?;
         let jobs_by_folder = stmt.query_map([], |row| {
             Ok(FolderStat {
                 folder_name: row.get(0)?,
@@ -754,7 +754,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare(&format!("SELECT COALESCE(j.task_type, 'Unknown'), COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {} GROUP BY j.task_type ORDER BY count DESC", where_clause))?;
+        let mut stmt = conn.prepare(&format!("SELECT COALESCE(task_type, 'Unknown'), COUNT(*) as count FROM jobs WHERE {} GROUP BY task_type ORDER BY count DESC", where_clause))?;
         let jobs_by_task_type = stmt.query_map([], |row| {
             Ok(TaskTypeStat {
                 task_type: row.get(0)?,
@@ -762,7 +762,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare(&format!("SELECT COALESCE(j.appl_type, 'Unknown'), COUNT(*) as count FROM jobs j INNER JOIN folders f ON j.folder_name = f.folder_name WHERE {} GROUP BY j.appl_type ORDER BY count DESC", where_clause))?;
+        let mut stmt = conn.prepare(&format!("SELECT COALESCE(appl_type, 'Unknown'), COUNT(*) as count FROM jobs WHERE {} GROUP BY appl_type ORDER BY count DESC", where_clause))?;
         let jobs_by_appl_type = stmt.query_map([], |row| {
             Ok(ApplTypeStat {
                 appl_type: row.get(0)?,

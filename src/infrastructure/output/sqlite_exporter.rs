@@ -167,6 +167,7 @@ impl SqliteExporter {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 job_name TEXT NOT NULL,
                 folder_name TEXT NOT NULL,
+                datacenter TEXT,
                 application TEXT,
                 sub_application TEXT,
                 appl_type TEXT,
@@ -263,7 +264,8 @@ impl SqliteExporter {
                 fprocs TEXT,
                 tpgms TEXT,
                 tprocs TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(job_name, folder_name, datacenter, jobisn)
             );
 
             -- Job scheduling table with all scheduling attributes
@@ -546,7 +548,7 @@ impl SqliteExporter {
 
         // Export all jobs in this folder
         for job in &folder.jobs {
-            self.export_job_tx(tx, job)?;
+            self.export_job_tx(tx, folder, job)?;
         }
 
         // Recursively export sub-folders
@@ -565,12 +567,13 @@ impl SqliteExporter {
     /// # Arguments
     ///
     /// * `tx` - Active database transaction
+    /// * `folder` - Parent folder entity (for datacenter info)
     /// * `job` - Job entity to export
     ///
     /// # Returns
     ///
     /// Result indicating success or error
-    fn export_job_tx(&self, tx: &Transaction, job: &Job) -> Result<()> {
+    fn export_job_tx(&self, tx: &Transaction, folder: &Folder, job: &Job) -> Result<()> {
         // Increment job counter for progress reporting
         let count = self.job_counter.get() + 1;
         self.job_counter.set(count);
@@ -581,7 +584,7 @@ impl SqliteExporter {
         tx.prepare_cached(
             r#"
             INSERT INTO jobs (
-                job_name, folder_name, application, sub_application, appl_type, appl_ver,
+                job_name, folder_name, datacenter, application, sub_application, appl_type, appl_ver,
                 description, owner, run_as, priority, critical, task_type, cyclic,
                 node_id, cmdline, jobisn, job_group, memname, author, doclib, docmem,
                 job_interval, override_path, overlib, memlib, confirm, retro, maxwait,
@@ -608,12 +611,12 @@ impl SqliteExporter {
                 ?68, ?69, ?70, ?71, ?72, ?73, ?74, ?75, ?76, ?77, ?78, ?79, ?80,
                 ?81, ?82, ?83, ?84, ?85, ?86, ?87, ?88, ?89, ?90, ?91, ?92, ?93,
                 ?94, ?95, ?96, ?97, ?98, ?99, ?100, ?101, ?102, ?103, ?104, ?105,
-                ?106, ?107, ?108
+                ?106, ?107, ?108, ?109
             )
             "#,
         )?
         .execute(params![
-            &job.job_name, &job.folder_name, &job.application, &job.sub_application,
+            &job.job_name, &job.folder_name, &folder.datacenter, &job.application, &job.sub_application,
             &job.appl_type, &job.appl_ver, &job.description, &job.owner, &job.run_as,
             &job.priority, if job.critical { 1 } else { 0 }, &job.task_type,
             if job.cyclic { 1 } else { 0 }, &job.node_id, &job.cmdline, &job.jobisn,
