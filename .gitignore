@@ -32,3 +32,5 @@ target
 /static/index.html.new
 .env
 /count_columns.sh
+/test_dashboard_filter.html
+/test_job_detail.sh

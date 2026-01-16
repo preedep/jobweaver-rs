@@ -16,6 +16,11 @@ function switchTab(tabName) {
     // Add active class to selected tab and button
     document.getElementById(`tab-${tabName}`).classList.add('active');
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    
+    // Load dependency graph when Dependencies tab is opened
+    if (tabName === 'dependencies' && window.currentJobIdForGraph && typeof loadDependencyGraph === 'function') {
+        loadDependencyGraph(window.currentJobIdForGraph);
+    }
 }
 
 // Initialize tab switching on page load
@@ -227,6 +232,11 @@ function populateLimitsTab(data) {
 
 // Populate Dependencies Tab
 function populateDependenciesTab(data) {
+    // Store job ID for lazy loading when tab is clicked
+    if (data.job && data.job.id) {
+        window.currentJobIdForGraph = data.job.id;
+    }
+    
     // In Conditions
     const inConditions = data.in_conditions || [];
     document.getElementById('in-cond-count').textContent = inConditions.length;

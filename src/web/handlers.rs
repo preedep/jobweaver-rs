@@ -5,6 +5,7 @@
 
 use actix_web::{web, HttpResponse, HttpRequest, HttpMessage, Responder};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
+use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{info, error};
 
@@ -235,13 +236,69 @@ pub async fn get_job_detail(
     }
 }
 
+/// Get dependency graph for a job
+///
+/// Returns the dependency graph including both upstream and downstream dependencies
+///
+/// # Arguments
+///
+/// * `job_id` - ID of the job
+/// * `repository` - Job repository
+///
+/// # Returns
+///
+/// HTTP 200 with dependency graph, HTTP 404 if not found, HTTP 500 on error
+pub async fn get_dependency_graph(
+    job_id: web::Path<i64>,
+    repository: web::Data<Arc<JobRepository>>,
+    _auth: BearerAuth,
+) -> HttpResponse {
+    match repository.get_dependency_graph(*job_id) {
+        Ok(graph) => HttpResponse::Ok().json(ApiResponse::success(graph)),
+        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+            format!("Failed to get dependency graph: {}", e)
+        )),
+    }
+}
+
+/// Query parameters for top root jobs
+#[derive(Debug, Deserialize)]
+pub struct RootJobsQuery {
+    pub datacenter: Option<String>,
+    pub folder_order_method_filter: Option<String>,
+    pub limit: Option<u32>,
+}
+
+/// Get top root jobs with highest downstream dependency counts
+pub async fn get_top_root_jobs(
+    repository: web::Data<Arc<JobRepository>>,
+    query: web::Query<RootJobsQuery>,
+    _auth: BearerAuth,
+) -> HttpResponse {
+    let limit = query.limit.unwrap_or(10);
+    let datacenter_value = query.datacenter.as_deref();
+    let folder_filter = query.folder_order_method_filter.as_deref();
+    
+    match repository.get_top_root_jobs(limit, datacenter_value, folder_filter) {
+        Ok(root_jobs) => HttpResponse::Ok().json(ApiResponse::success(root_jobs)),
+        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+            format!("Failed to get top root jobs: {}", e)
+        )),
+    }
+}
+
 /// Gets dashboard statistics
 ///
 /// Returns aggregated statistics for the dashboard view.
+/// Supports optional filtering by folder_order_method presence.
 ///
 /// # Arguments
 ///
 /// * `repository` - Job repository for database access
+/// * `filter` - Optional query parameter to filter by folder_order_method
+///   - "with": Only jobs in folders with folder_order_method
+///   - "without": Only jobs in folders without folder_order_method
+///   - None/other: All jobs
 /// * `_auth` - Bearer token authentication
 ///
 /// # Returns
@@ -249,9 +306,12 @@ pub async fn get_job_detail(
 /// HTTP 200 with statistics on success, HTTP 500 on error
 pub async fn get_dashboard_stats(
     repository: web::Data<Arc<JobRepository>>,
+    filter: web::Query<DashboardFilter>,
     _auth: BearerAuth,
 ) -> HttpResponse {
-    match repository.get_dashboard_stats() {
+    let folder_filter = filter.folder_order_method_filter.as_deref();
+    let datacenter_filter = filter.datacenter.as_deref();
+    match repository.get_dashboard_stats(folder_filter, datacenter_filter) {
         Ok(stats) => HttpResponse::Ok().json(ApiResponse::success(stats)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
             format!("Failed to get dashboard stats: {}", e)
@@ -262,10 +322,12 @@ pub async fn get_dashboard_stats(
 /// Gets available filter options for job search
 ///
 /// Returns lists of unique values for filterable fields.
+/// Optionally filters by datacenter to show only relevant options.
 ///
 /// # Arguments
 ///
-/// * `repository` - Job repository for database access
+/// * `repository` - Repository instance
+/// * `datacenter` - Optional datacenter filter
 /// * `_auth` - Bearer token authentication
 ///
 /// # Returns
@@ -273,9 +335,11 @@ pub async fn get_dashboard_stats(
 /// HTTP 200 with filter options on success, HTTP 500 on error
 pub async fn get_filter_options(
     repository: web::Data<Arc<JobRepository>>,
+    datacenter: web::Query<DatacenterFilter>,
     _auth: BearerAuth,
 ) -> HttpResponse {
-    match repository.get_filter_options() {
+    let datacenter_value = datacenter.datacenter.as_deref();
+    match repository.get_filter_options(datacenter_value) {
         Ok(options) => HttpResponse::Ok().json(ApiResponse::success(options)),
         Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
             format!("Failed to get filter options: {}", e)

@@ -404,10 +404,14 @@ pub struct ExportSqliteCommand;
 
 impl ExportSqliteCommand {
     pub fn execute<P: AsRef<Path>>(
-        input_path: P,
+        input_paths: &str,
         output_db_path: P,
     ) -> Result<()> {
         info!("Starting Control-M XML to SQLite export...");
+        
+        // Parse comma-separated file paths
+        let file_paths: Vec<&str> = input_paths.split(',').map(|s| s.trim()).collect();
+        info!("Processing {} XML file(s)", file_paths.len());
         
         // Create spinner for parsing
         let spinner = ProgressBar::new_spinner();
@@ -417,18 +421,52 @@ impl ExportSqliteCommand {
                 .template("{spinner:.cyan} {msg}")
                 .unwrap()
         );
-        spinner.set_message("📖 Parsing XML file...");
-        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
         
         let parser = ControlMXmlParser::new();
-        info!("Parsing XML file: {:?}", input_path.as_ref());
-        let folders = parser.parse_file(&input_path)
-            .context("Failed to parse Control-M XML file")?;
+        let mut all_folders = Vec::new();
         
-        spinner.finish_with_message(format!("✓ Found {} folders", folders.len()));
+        // Parse each XML file
+        for (index, file_path) in file_paths.iter().enumerate() {
+            spinner.set_message(format!("📖 Parsing file {}/{}: {}", index + 1, file_paths.len(), file_path));
+            spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+            
+            info!("Parsing XML file {}/{}: {}", index + 1, file_paths.len(), file_path);
+            let folders = parser.parse_file(Path::new(file_path))
+                .with_context(|| format!("Failed to parse XML file: {}", file_path))?;
+            
+            // Count jobs and datacenters in this file
+            let file_jobs: usize = folders.iter().map(|f| f.total_jobs()).sum();
+            let mut datacenter_stats: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+            for folder in &folders {
+                let dc = folder.datacenter.clone().unwrap_or_else(|| "(unknown)".to_string());
+                *datacenter_stats.entry(dc).or_insert(0) += folder.total_jobs();
+            }
+            
+            info!("  → Found {} folders, {} jobs in {}", folders.len(), file_jobs, file_path);
+            for (dc, count) in datacenter_stats.iter() {
+                info!("     • Datacenter '{}': {} jobs", dc, count);
+            }
+            
+            all_folders.extend(folders);
+        }
         
-        let total_jobs: usize = folders.iter().map(|f| f.total_jobs()).sum();
-        info!("Total jobs: {}", total_jobs);
+        spinner.finish_with_message(format!("✓ Parsed {} file(s), found {} total folders", file_paths.len(), all_folders.len()));
+        
+        // Calculate total statistics across all files
+        let total_jobs: usize = all_folders.iter().map(|f| f.total_jobs()).sum();
+        let mut total_datacenter_stats: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for folder in &all_folders {
+            let dc = folder.datacenter.clone().unwrap_or_else(|| "(unknown)".to_string());
+            *total_datacenter_stats.entry(dc).or_insert(0) += folder.total_jobs();
+        }
+        
+        info!("📊 TOTAL SUMMARY across {} file(s):", file_paths.len());
+        info!("  → Total folders: {}", all_folders.len());
+        info!("  → Total jobs: {}", total_jobs);
+        info!("  → Jobs by datacenter:");
+        for (dc, count) in total_datacenter_stats.iter() {
+            info!("     • '{}': {} jobs", dc, count);
+        }
 
         if total_jobs == 0 {
             warn!("No jobs found in the XML file");
@@ -462,7 +500,7 @@ impl ExportSqliteCommand {
             });
 
         info!("Exporting folders and jobs to SQLite...");
-        exporter.export_folders(&folders)
+        exporter.export_folders(&all_folders)
             .context("Failed to export data to SQLite")?;
 
         pb.finish_with_message("✓ Export completed!");
@@ -474,6 +512,7 @@ impl ExportSqliteCommand {
         println!("✅ SQLITE EXPORT COMPLETED");
         println!("{}", "=".repeat(80));
         println!("\n📊 Export Statistics:");
+        println!("  • XML files processed:     {}", file_paths.len());
         println!("  • Database file:           {:?}", output_db_path.as_ref());
         println!("  • Folders exported:        {}", stats.folder_count);
         println!("  • Jobs exported:           {}", stats.job_count);

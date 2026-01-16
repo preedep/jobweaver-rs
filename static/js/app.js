@@ -120,6 +120,7 @@ function initializeEventListeners() {
     initializeSearchListeners();
     initializeTableListeners();
     initializeModalListeners();
+    initializeDashboardListeners();
 }
 
 /**
@@ -217,13 +218,31 @@ function initializeSearchListeners() {
     const exportBtn = document.getElementById('export-csv-btn');
     const perPageSelect = document.getElementById('per-page');
     
-    if (searchBtn) searchBtn.addEventListener('click', performSearch);
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            currentPage = 1; // Reset to page 1 when search criteria changes
+            performSearch();
+        });
+    }
     if (resetBtn) resetBtn.addEventListener('click', resetFilters);
     if (exportBtn) exportBtn.addEventListener('click', exportToCSV);
     if (perPageSelect) {
         perPageSelect.addEventListener('change', (e) => {
             currentPerPage = parseInt(e.target.value);
+            currentPage = 1; // Reset to page 1 when changing items per page
             performSearch();
+        });
+    }
+    
+    // Add datacenter change listener to reload dependent filters
+    const datacenterFilter = document.getElementById('filter-datacenter');
+    if (datacenterFilter) {
+        $(datacenterFilter).on('change', function() {
+            const selectedDatacenter = $(this).val();
+            console.log(`🔄 [FILTERS] Datacenter changed to: ${selectedDatacenter}, reloading dependent filters...`);
+            
+            // Reload filter options based on selected datacenter
+            loadFilterOptions(selectedDatacenter);
         });
     }
 }
@@ -232,11 +251,24 @@ function initializeSearchListeners() {
  * Initializes table column header click listeners for sorting
  */
 function initializeTableListeners() {
-    document.querySelectorAll('.data-table th[data-sort]').forEach(th => {
-        th.addEventListener('click', () => {
-            handleTableSort(th.dataset.sort);
+    const sortableHeaders = document.querySelectorAll('.data-table th[data-sort], .data-table-modern th[data-sort]');
+    console.log(`🔧 [TABLE] Initializing table listeners for ${sortableHeaders.length} sortable headers`);
+    
+    sortableHeaders.forEach((th, index) => {
+        console.log(`  ${index + 1}. Column: ${th.textContent.trim()} | data-sort: ${th.dataset.sort}`);
+        
+        // Remove old listener by cloning and replacing the element
+        const newTh = th.cloneNode(true);
+        th.parentNode.replaceChild(newTh, th);
+        
+        // Add new listener
+        newTh.addEventListener('click', () => {
+            console.log(`🖱️  [TABLE] Header clicked: ${newTh.dataset.sort}`);
+            handleTableSort(newTh.dataset.sort);
         });
     });
+    
+    console.log('✅ [TABLE] Table listeners initialized');
 }
 
 /**
@@ -246,13 +278,53 @@ function initializeTableListeners() {
  * @param {string} sortBy - Column name to sort by
  */
 function handleTableSort(sortBy) {
+    console.log(`📊 [SORT] Sort requested for column: ${sortBy}`);
+    console.log(`📊 [SORT] Current sort state - by: ${currentSort.by}, order: ${currentSort.order}`);
+    
     if (currentSort.by === sortBy) {
         currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+        console.log(`📊 [SORT] Toggling sort order to: ${currentSort.order}`);
     } else {
         currentSort.by = sortBy;
         currentSort.order = 'asc';
+        console.log(`📊 [SORT] New column sort - by: ${sortBy}, order: asc`);
     }
+    
+    // Update sort icons
+    console.log(`🎨 [SORT] Updating sort icons...`);
+    updateSortIcons(sortBy, currentSort.order);
+    
+    console.log(`🔍 [SORT] Performing search with new sort...`);
     performSearch();
+}
+
+/**
+ * Updates sort icons in table headers to show current sort state
+ * 
+ * @param {string} sortBy - Column being sorted
+ * @param {string} order - Sort order ('asc' or 'desc')
+ */
+function updateSortIcons(sortBy, order) {
+    const headers = document.querySelectorAll('.data-table th[data-sort], .data-table-modern th[data-sort]');
+    console.log(`🎨 [SORT] Updating icons for ${headers.length} headers (active: ${sortBy}, order: ${order})`);
+    
+    headers.forEach(th => {
+        const icon = th.querySelector('i');
+        if (!icon) {
+            console.log(`  ⚠️  No icon found in header: ${th.dataset.sort}`);
+            return;
+        }
+        
+        if (th.dataset.sort === sortBy) {
+            // Update icon for active sort column
+            const newClass = order === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+            icon.className = newClass;
+            console.log(`  ✅ Active column: ${sortBy} → ${newClass}`);
+        } else {
+            // Reset icon for other columns
+            icon.className = 'fas fa-sort';
+        }
+    });
 }
 
 /**
@@ -278,6 +350,50 @@ function initializeModalListeners() {
  */
 function closeAllModals() {
     document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+}
+
+/**
+ * Initializes dashboard filter event listeners
+ */
+function initializeDashboardListeners() {
+    console.log('📊 [DASHBOARD] Initializing dashboard listeners...');
+    
+    const datacenterFilter = document.getElementById('dashboard-datacenter-filter');
+    const folderFilter = document.getElementById('dashboard-folder-filter');
+    
+    // Setup datacenter filter
+    if (datacenterFilter) {
+        const newDatacenterFilter = datacenterFilter.cloneNode(true);
+        datacenterFilter.parentNode.replaceChild(newDatacenterFilter, datacenterFilter);
+        
+        newDatacenterFilter.addEventListener('change', () => {
+            console.log(`📊 [DASHBOARD] Datacenter filter changed to: ${newDatacenterFilter.value}`);
+            loadDashboardWithFilters();
+        });
+    }
+    
+    // Setup folder order method filter
+    if (folderFilter) {
+        const newFolderFilter = folderFilter.cloneNode(true);
+        folderFilter.parentNode.replaceChild(newFolderFilter, folderFilter);
+        
+        newFolderFilter.addEventListener('change', () => {
+            console.log(`📊 [DASHBOARD] Folder filter changed to: ${newFolderFilter.value || 'All Jobs'}`);
+            loadDashboardWithFilters();
+        });
+    }
+    
+    console.log('📊 [DASHBOARD] Event listeners attached successfully');
+}
+
+/**
+ * Loads dashboard with current filter values
+ */
+function loadDashboardWithFilters() {
+    const datacenter = document.getElementById('dashboard-datacenter-filter')?.value || '';
+    const folderMethod = document.getElementById('dashboard-folder-filter')?.value || '';
+    
+    loadDashboard(folderMethod, datacenter);
 }
 
 /**
@@ -434,6 +550,8 @@ function switchContentPage(page) {
     if (pageElement) pageElement.classList.add('active');
     
     if (page === 'dashboard') {
+        loadFilterOptions(); // Load filter options to populate datacenter dropdown
+        initializeDashboardListeners(); // Re-attach event listener
         loadDashboard();
     } else if (page === 'jobs') {
         loadFilterOptions();
@@ -451,13 +569,20 @@ function switchContentPage(page) {
  * 
  * @returns {Promise<void>}
  */
-async function loadDashboard() {
+async function loadDashboard(folderFilter = '', datacenterFilter = '') {
     const startTime = performance.now();
     console.log('📊 [DASHBOARD] Loading dashboard statistics...');
     
     try {
         const fetchStart = performance.now();
-        const response = await fetch(`${API_BASE}/dashboard/stats`, {
+        
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (folderFilter) params.append('folder_order_method_filter', folderFilter);
+        if (datacenterFilter) params.append('datacenter', datacenterFilter);
+        
+        const url = params.toString() ? `${API_BASE}/dashboard/stats?${params.toString()}` : `${API_BASE}/dashboard/stats`;
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -504,6 +629,16 @@ async function loadDashboard() {
             renderBarChart('chart-applications', stats.jobs_by_application, 'application', 'count');
             renderBarChart('chart-folders', stats.jobs_by_folder, 'folder_name', 'job_count');
             
+            // Make charts clickable for detailed view
+            if (typeof makeChartsClickable === 'function') {
+                makeChartsClickable();
+            }
+            
+            // Load top root jobs (always show top 10 on dashboard)
+            if (typeof loadTopRootJobs === 'function') {
+                loadTopRootJobs(datacenterFilter || null, folderFilter || null, 10, 'root-jobs-list');
+            }
+            
             const endTime = performance.now();
             console.log(`✅ [DASHBOARD] Dashboard loaded in ${(endTime - startTime).toFixed(2)}ms`);
         } else {
@@ -530,9 +665,20 @@ function renderBarChart(containerId, data, labelKey, valueKey) {
         return;
     }
     
-    const maxValue = Math.max(...data.map(item => item[valueKey]));
+    // Store ALL data globally for chart detail modal (up to 50 items)
+    const chartType = containerId.replace('chart-', '').replace(/-/g, '_');
+    const normalizedData = data.map(item => ({
+        name: item[labelKey],
+        count: item[valueKey],
+        ...item
+    }));
+    window[`chartData_${chartType}`] = normalizedData;
     
-    container.innerHTML = data.map(item => {
+    // Display only Top 10 on dashboard
+    const displayData = data.slice(0, 10);
+    const maxValue = Math.max(...displayData.map(item => item[valueKey]));
+    
+    container.innerHTML = displayData.map(item => {
         const percentage = (item[valueKey] / maxValue) * 100;
         return `
             <div class="chart-bar">
@@ -598,16 +744,18 @@ function initializeSelect2() {
 
 /**
  * Loads available filter options from the server
- * Populates dropdown menus with unique values
+ * Populates all filter dropdowns with unique values
  * 
+ * @param {string} datacenter - Optional datacenter to filter options by
  * @returns {Promise<void>}
  */
-async function loadFilterOptions() {
+async function loadFilterOptions(datacenter = '') {
     const startTime = performance.now();
-    console.log('🔧 [FILTERS] Loading filter options...');
+    console.log('🔧 [FILTERS] Loading filter options...', datacenter ? `for datacenter: ${datacenter}` : '');
     
     try {
-        const response = await fetch(`${API_BASE}/filters`, {
+        const url = datacenter ? `${API_BASE}/filters?datacenter=${encodeURIComponent(datacenter)}` : `${API_BASE}/filters`;
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -633,8 +781,11 @@ async function loadFilterOptions() {
             populateSelect('filter-appl-type', options.appl_types);
             populateSelect('filter-appl-ver', options.appl_vers);
             populateSelect('filter-task-type', options.task_types);
-            populateSelect('filter-datacenter', options.datacenters);
+            populateSelect('filter-datacenter', options.datacenters, false); // No "All" option
             populateSelect('filter-folder-order-method', options.folder_order_methods);
+            
+            // Populate dashboard datacenter filter (no "All" option)
+            populateDashboardDatacenterFilter(options.datacenters);
             
             console.log('🔍 [FILTERS] Initializing Select2...');
             initializeSelect2();
@@ -648,20 +799,65 @@ async function loadFilterOptions() {
 }
 
 /**
+ * Populates dashboard datacenter filter (no "All" option)
+ * 
+ * @param {Array<string>} datacenters - Array of datacenter values
+ */
+function populateDashboardDatacenterFilter(datacenters) {
+    const select = document.getElementById('dashboard-datacenter-filter');
+    if (!select) {
+        console.warn('📊 [DASHBOARD] Datacenter filter element not found');
+        return;
+    }
+    
+    if (datacenters.length === 0) {
+        console.warn('📊 [DASHBOARD] No datacenters available to populate');
+        return;
+    }
+    
+    select.innerHTML = '';
+    
+    datacenters.forEach(datacenter => {
+        const opt = document.createElement('option');
+        opt.value = datacenter;
+        opt.textContent = datacenter;
+        select.appendChild(opt);
+    });
+    
+    // Auto-select first datacenter
+    select.value = datacenters[0];
+    
+    console.log(`📊 [DASHBOARD] Datacenter filter populated with ${datacenters.length} options, selected: ${datacenters[0]}`);
+    
+    // Trigger initial load with selected datacenter
+    setTimeout(() => {
+        loadDashboardWithFilters();
+    }, 100);
+}
+
+/**
  * Populates a select dropdown with options
  * 
  * @param {string} selectId - ID of the select element
  * @param {Array<string>} options - Array of option values
+ * @param {boolean} keepAllOption - Whether to keep the "All" option (default: true)
  */
-function populateSelect(selectId, options) {
+function populateSelect(selectId, options, keepAllOption = true) {
     const select = document.getElementById(selectId);
     const currentValue = select.value;
     
-    // Keep first option (All)
-    const firstOption = select.options[0];
+    // Clear select
     select.innerHTML = '';
-    select.appendChild(firstOption);
     
+    // Keep first option (All) if specified
+    if (keepAllOption && select.options.length > 0) {
+        const firstOption = document.createElement('option');
+        firstOption.value = '';
+        firstOption.textContent = select.getAttribute('data-all-text') || 'All';
+        select.appendChild(firstOption);
+    }
+    
+    // Add options
     options.forEach(option => {
         const opt = document.createElement('option');
         opt.value = option;
@@ -669,7 +865,14 @@ function populateSelect(selectId, options) {
         select.appendChild(opt);
     });
     
-    select.value = currentValue;
+    // Set value: restore previous or select first non-empty option
+    if (currentValue && options.includes(currentValue)) {
+        select.value = currentValue;
+    } else if (!keepAllOption && options.length > 0) {
+        select.value = options[0]; // Auto-select first value when no "All" option
+    } else {
+        select.value = currentValue;
+    }
 }
 
 /**
@@ -877,6 +1080,10 @@ function renderJobsTable(data) {
     tbody.innerHTML = data.jobs.map(renderJobRow).join('');
     updateResultsInfo(data);
     renderPagination(data);
+    
+    // Re-attach sorting event listeners to table headers
+    initializeTableListeners();
+    
     console.log('[TABLE] Table rendered successfully');
 }
 
@@ -910,52 +1117,92 @@ function updatePageStats(total, filtered) {
 }
 
 /**
+ * Helper function to render a badge with count
+ * @param {string} type - Badge type (info, success, danger, warning, primary)
+ * @param {number} count - Count to display
+ * @param {string} title - Optional tooltip title
+ * @returns {string} HTML string for badge
+ */
+function renderCountBadge(type, count, title = '') {
+    const titleAttr = title ? ` title="${title}"` : '';
+    return `<span class="badge badge-${type}"${titleAttr}>${count || 0}</span>`;
+}
+
+/**
+ * Helper function to render a boolean badge
+ * @param {boolean} value - Boolean value
+ * @param {string} trueType - Badge type for true (danger, warning, etc.)
+ * @param {string} falseType - Badge type for false
+ * @returns {string} HTML string for badge
+ */
+function renderBooleanBadge(value, trueType, falseType) {
+    return value 
+        ? `<span class="badge badge-${trueType}">Yes</span>`
+        : `<span class="badge badge-${falseType}">No</span>`;
+}
+
+/**
+ * Helper function to render a table cell with optional value
+ * @param {*} value - Value to display
+ * @param {string} defaultValue - Default value if empty (default: '-')
+ * @param {boolean} escape - Whether to escape HTML (default: true)
+ * @returns {string} HTML string for cell content
+ */
+function renderCell(value, defaultValue = '-', escape = true) {
+    const displayValue = value ?? defaultValue;
+    return escape ? escapeHtml(displayValue) : displayValue;
+}
+
+/**
+ * Helper function to render action buttons for a job
+ * @param {number} jobId - Job ID
+ * @returns {string} HTML string for action buttons
+ */
+function renderJobActions(jobId) {
+    return `
+        <button class="btn btn-icon" onclick="viewJobDetail(${jobId})" title="View Details">
+            <i class="fas fa-eye"></i>
+        </button>
+        <button class="btn btn-icon" onclick="showJobGraph(${jobId})" title="View Graph">
+            <i class="fas fa-project-diagram"></i>
+        </button>
+    `;
+}
+
+/**
  * Renders a single job row for the table
  * 
  * @param {Object} job - Job data object
  * @returns {string} HTML string for table row
  */
 function renderJobRow(job) {
-    const criticalBadge = job.critical 
-        ? '<span class="badge badge-danger">Yes</span>' 
-        : '<span class="badge badge-success">No</span>';
-    const cyclicBadge = job.cyclic 
-        ? '<span class="badge badge-warning">Yes</span>' 
-        : '<span class="badge badge-secondary">No</span>';
-    
     return `
         <tr>
             <td><strong>${escapeHtml(job.job_name)}</strong></td>
             <td><span title="${escapeHtml(job.folder_name)}">${escapeHtml(job.folder_name)}</span></td>
-            <td>${escapeHtml(job.datacenter || '-')}</td>
-            <td>${escapeHtml(job.folder_order_method || '-')}</td>
-            <td>${escapeHtml(job.application || '-')}</td>
-            <td>${escapeHtml(job.sub_application || '-')}</td>
-            <td>${escapeHtml(job.appl_type || '-')}</td>
-            <td>${escapeHtml(job.appl_ver || '-')}</td>
-            <td>${escapeHtml(job.task_type || '-')}</td>
-            <td>${criticalBadge}</td>
-            <td>${cyclicBadge}</td>
-            <td><span title="${escapeHtml(job.node_id || '')}">${escapeHtml(job.node_id || '-')}</span></td>
-            <td>${escapeHtml(job.group || '-')}</td>
-            <td>${escapeHtml(job.memname || '-')}</td>
-            <td>${escapeHtml(job.owner || '-')}</td>
-            <td>${job.maxwait !== null && job.maxwait !== undefined ? job.maxwait : '-'}</td>
-            <td>${job.maxrerun !== null && job.maxrerun !== undefined ? job.maxrerun : '-'}</td>
-            <td>${escapeHtml(job.shift || '-')}</td>
-            <td><span class="badge badge-info">${job.control_resources_count || 0}</span></td>
-            <td><span class="badge badge-info">${job.variables_count || 0}</span></td>
-            <td><span class="badge badge-success">${job.in_conditions_count || 0}</span></td>
-            <td><span class="badge badge-danger">${job.out_conditions_count || 0}</span></td>
-            <td><span class="badge badge-warning">${job.on_conditions_count || 0}</span></td>
-            <td>
-                <button class="btn btn-icon" onclick="viewJobDetail(${job.id})" title="View Details">
-                    <i class="fas fa-eye"></i>
-                </button>
-                <button class="btn btn-icon" onclick="showJobGraph(${job.id})" title="View Graph">
-                    <i class="fas fa-project-diagram"></i>
-                </button>
-            </td>
+            <td>${renderCell(job.datacenter)}</td>
+            <td>${renderCell(job.folder_order_method)}</td>
+            <td>${renderCell(job.application)}</td>
+            <td>${renderCell(job.sub_application)}</td>
+            <td>${renderCell(job.appl_type)}</td>
+            <td>${renderCell(job.appl_ver)}</td>
+            <td>${renderCell(job.task_type)}</td>
+            <td>${renderBooleanBadge(job.critical, 'danger', 'success')}</td>
+            <td>${renderBooleanBadge(job.cyclic, 'warning', 'secondary')}</td>
+            <td><span title="${escapeHtml(job.node_id || '')}">${renderCell(job.node_id)}</span></td>
+            <td>${renderCell(job.group)}</td>
+            <td>${renderCell(job.memname)}</td>
+            <td>${renderCell(job.owner)}</td>
+            <td>${renderCell(job.maxwait)}</td>
+            <td>${renderCell(job.maxrerun)}</td>
+            <td>${renderCell(job.shift)}</td>
+            <td>${renderCountBadge('info', job.control_resources_count)}</td>
+            <td>${renderCountBadge('info', job.variables_count)}</td>
+            <td>${renderCountBadge('success', job.in_conditions_count)}</td>
+            <td>${renderCountBadge('danger', job.out_conditions_count)}</td>
+            <td>${renderCountBadge('warning', job.on_conditions_count)}</td>
+            <td>${renderCountBadge('primary', job.total_dependencies_e2e, 'End-to-End Dependencies (including transitive)')}</td>
+            <td>${renderJobActions(job.id)}</td>
         </tr>
     `;
 }
@@ -1547,11 +1794,7 @@ function renderJobGraph(graphData, mode = 'direct') {
             zoomView: true,
             hover: true,
             tooltipDelay: 100,
-            navigationButtons: false,
-            tooltip: {
-                enabled: true,
-                delay: 100
-            }
+            navigationButtons: false
         },
         nodes: {
             shape: 'box',

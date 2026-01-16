@@ -87,18 +87,23 @@ impl JobRepository {
         params_vec: &mut Vec<Box<dyn rusqlite::ToSql>>,
         request: &JobSearchRequest
     ) {
-        // Datacenter filter
-        self.add_string_filter_owned(where_clauses, params_vec, &request.datacenter, 
-            "EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = ?)", "=", "datacenter");
+        // Datacenter filter - use datacenter column from jobs table
+        if let Some(ref datacenter) = request.datacenter {
+            if !datacenter.is_empty() {
+                tracing::debug!("  ➕ Adding datacenter filter: {}", datacenter);
+                where_clauses.push("j.datacenter = ?".to_string());
+                params_vec.push(Box::new(datacenter.clone()));
+            }
+        }
         
         // Folder order method with special "(Empty)" handling
         if let Some(ref folder_order_method) = request.folder_order_method {
             if folder_order_method == "(Empty)" {
                 tracing::debug!("  ➕ Adding folder_order_method filter: (Empty) - searching for NULL or empty");
-                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND (f.folder_order_method IS NULL OR f.folder_order_method = ''))".to_string());
+                where_clauses.push("(f.folder_order_method IS NULL OR f.folder_order_method = '')".to_string());
             } else {
                 tracing::debug!("  ➕ Adding folder_order_method filter: {}", folder_order_method);
-                where_clauses.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.folder_order_method = ?)".to_string());
+                where_clauses.push("f.folder_order_method = ?".to_string());
                 params_vec.push(Box::new(folder_order_method.clone()));
             }
         }
@@ -248,7 +253,7 @@ impl JobRepository {
         where_clause: &str,
         params_vec: &[Box<dyn rusqlite::ToSql>]
     ) -> Result<u32> {
-        let count_query = format!("SELECT COUNT(*) FROM jobs j {}", where_clause);
+        let count_query = format!("SELECT COUNT(*) FROM jobs j LEFT JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter {}", where_clause);
         tracing::info!("🔢 [COUNT] Executing count query: {}", count_query);
         tracing::debug!("🔢 [COUNT] With {} parameters", params_vec.len());
         
@@ -281,7 +286,7 @@ impl JobRepository {
             r#"
             SELECT 
                 j.id, j.job_name, j.folder_name,
-                f.datacenter, f.folder_order_method,
+                j.datacenter, f.folder_order_method,
                 j.application, j.sub_application,
                 COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
@@ -311,9 +316,10 @@ impl JobRepository {
                 (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id) as out_cond_count,
                 (SELECT COUNT(*) FROM on_conditions WHERE job_id = j.id) as on_cond_count,
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id) as ctrl_res_count,
-                (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) as var_count
+                (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id) as var_count,
+                0 as total_dependencies_e2e
             FROM jobs j
-            LEFT JOIN folders f ON j.folder_name = f.folder_name
+            LEFT JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
             {}
             ORDER BY {} {}
             LIMIT ? OFFSET ?
@@ -456,6 +462,7 @@ impl JobRepository {
             on_conditions_count: row.get(113)?,
             control_resources_count: row.get(114)?,
             variables_count: row.get(115)?,
+            total_dependencies_e2e: row.get(116)?,
         })
     }
 
@@ -466,7 +473,7 @@ impl JobRepository {
             r#"
             SELECT 
                 j.id, j.job_name, j.folder_name,
-                f.datacenter, f.folder_order_method,
+                j.datacenter, f.folder_order_method,
                 j.application, j.sub_application,
                 COALESCE(j.appl_type, '') as appl_type, COALESCE(j.appl_ver, '') as appl_ver,
                 j.description, j.owner, j.run_as, j.priority, j.critical,
@@ -496,9 +503,10 @@ impl JobRepository {
                 (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM on_conditions WHERE job_id = j.id),
                 (SELECT COUNT(*) FROM control_resources WHERE job_id = j.id),
-                (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id)
+                (SELECT COUNT(*) FROM job_variables WHERE job_id = j.id),
+                0 as total_dependencies_e2e
             FROM jobs j
-            LEFT JOIN folders f ON j.folder_name = f.folder_name
+            LEFT JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
             WHERE j.id = ?
             "#,
             params![job_id],
@@ -659,38 +667,296 @@ impl JobRepository {
         Ok(edits)
     }
 
-    fn get_metadata(&self, conn: &Connection, job_id: i64) -> Result<Vec<Variable>> {
-        let mut stmt = conn.prepare("SELECT meta_key, meta_value FROM job_metadata WHERE job_id = ?")?;
+    fn get_metadata(&self, conn: &Connection, job_id: i64) -> Result<Vec<JobMetadata>> {
+        let mut stmt = conn.prepare(
+            "SELECT meta_key, meta_value FROM job_metadata WHERE job_id = ?"
+        )?;
         let metadata = stmt.query_map(params![job_id], |row| {
-            Ok(Variable {
-                name: row.get(0)?,
+            Ok(JobMetadata {
+                key: row.get(0)?,
                 value: row.get(1)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         Ok(metadata)
     }
 
-    pub fn get_dashboard_stats(&self) -> Result<DashboardStats> {
+    pub fn get_top_root_jobs(&self, limit: u32, datacenter_filter: Option<&str>, folder_filter: Option<&str>) -> Result<Vec<RootJobStat>> {
         let conn = self.conn.lock().unwrap();
         
-        let total_jobs: u32 = conn.query_row("SELECT COUNT(*) FROM jobs", [], |row| row.get(0))?;
-        let total_folders: u32 = conn.query_row("SELECT COUNT(DISTINCT folder_name) FROM jobs", [], |row| row.get(0))?;
-        let critical_jobs: u32 = conn.query_row("SELECT COUNT(*) FROM jobs WHERE critical = 1", [], |row| row.get(0))?;
-        let cyclic_jobs: u32 = conn.query_row("SELECT COUNT(*) FROM jobs WHERE cyclic = 1", [], |row| row.get(0))?;
+        let mut where_conditions = Vec::new();
+        
+        if let Some(dc) = datacenter_filter {
+            where_conditions.push(format!("j.datacenter = '{}'", dc.replace("'", "''")));
+        }
+        
+        if let Some(filter) = folder_filter {
+            match filter {
+                "with" => where_conditions.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = j.datacenter AND f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
+                "without" => where_conditions.push("NOT EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = j.datacenter AND f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
+                _ => {}
+            }
+        }
+        
+        let where_clause = if where_conditions.is_empty() {
+            String::new()
+        } else {
+            format!("AND {}", where_conditions.join(" AND "))
+        };
+        
+        let query = format!(r#"
+            WITH internal_deps AS (
+                SELECT DISTINCT
+                    j1.id as dependent_job_id,
+                    j2.id as source_job_id,
+                    j1.folder_name,
+                    j1.datacenter
+                FROM jobs j1
+                INNER JOIN in_conditions ic ON j1.id = ic.job_id
+                INNER JOIN out_conditions oc ON ic.condition_name = oc.condition_name 
+                    AND (ic.odate = oc.odate OR (ic.odate IS NULL AND oc.odate IS NULL))
+                INNER JOIN jobs j2 ON oc.job_id = j2.id
+                WHERE j1.folder_name = j2.folder_name 
+                  AND j1.datacenter = j2.datacenter
+                  AND j1.id != j2.id
+            ),
+            root_jobs AS (
+                SELECT DISTINCT
+                    j.id,
+                    j.job_name,
+                    j.folder_name,
+                    j.datacenter
+                FROM jobs j
+                WHERE EXISTS (
+                    SELECT 1 FROM internal_deps WHERE source_job_id = j.id
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM internal_deps WHERE dependent_job_id = j.id
+                )
+                {}
+            )
+            SELECT 
+                r.id,
+                r.job_name,
+                r.folder_name,
+                r.datacenter,
+                COUNT(DISTINCT d.dependent_job_id) as downstream_count
+            FROM root_jobs r
+            LEFT JOIN internal_deps d ON r.id = d.source_job_id
+            GROUP BY r.id, r.job_name, r.folder_name, r.datacenter
+            ORDER BY downstream_count DESC
+            LIMIT ?
+        "#, where_clause);
+        
+        let mut stmt = conn.prepare(&query)?;
+        let root_jobs = stmt.query_map(params![limit], |row| {
+            Ok(RootJobStat {
+                id: row.get(0)?,
+                job_name: row.get(1)?,
+                folder_name: row.get(2)?,
+                datacenter: row.get(3)?,
+                downstream_count: row.get(4)?,
+            })
+        })?.collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(root_jobs)
+    }
+
+    pub fn get_dependency_graph(&self, job_id: i64) -> Result<DependencyGraph> {
+        let conn = self.conn.lock().unwrap();
+        
+        // Get root job info
+        let root_job: (String, String) = conn.query_row(
+            "SELECT folder_name, datacenter FROM jobs WHERE id = ?",
+            params![job_id],
+            |row| Ok((row.get(0)?, row.get(1)?))
+        )?;
+        let (root_folder, root_datacenter) = root_job;
+        
+        // Get all nodes (jobs involved in dependency chain)
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        
+        // Get upstream dependencies (jobs that this job depends on)
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT DISTINCT
+                j2.id, j2.job_name, j2.folder_name, j2.datacenter,
+                ic.condition_name
+            FROM jobs j1
+            INNER JOIN in_conditions ic ON j1.id = ic.job_id
+            INNER JOIN out_conditions oc ON ic.condition_name = oc.condition_name 
+                AND (ic.odate = oc.odate OR (ic.odate IS NULL AND oc.odate IS NULL))
+            INNER JOIN jobs j2 ON oc.job_id = j2.id
+            WHERE j1.id = ?
+            "#
+        )?;
+        
+        let upstream = stmt.query_map(params![job_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?.collect::<Result<Vec<_>, _>>()?;
+        
+        for (id, job_name, folder_name, datacenter, condition_name) in upstream {
+            let is_internal = folder_name == root_folder && datacenter == root_datacenter;
+            nodes.push(DependencyNode {
+                id,
+                job_name,
+                folder_name,
+                datacenter,
+                is_internal,
+            });
+            edges.push(DependencyEdge {
+                source_id: id,
+                target_id: job_id,
+                condition_name,
+                edge_type: "in".to_string(),
+            });
+        }
+        
+        // Get downstream dependencies (jobs that depend on this job)
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT DISTINCT
+                j2.id, j2.job_name, j2.folder_name, j2.datacenter,
+                oc.condition_name
+            FROM jobs j1
+            INNER JOIN out_conditions oc ON j1.id = oc.job_id
+            INNER JOIN in_conditions ic ON oc.condition_name = ic.condition_name 
+                AND (oc.odate = ic.odate OR (oc.odate IS NULL AND ic.odate IS NULL))
+            INNER JOIN jobs j2 ON ic.job_id = j2.id
+            WHERE j1.id = ?
+            "#
+        )?;
+        
+        let downstream = stmt.query_map(params![job_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?.collect::<Result<Vec<_>, _>>()?;
+        
+        for (id, job_name, folder_name, datacenter, condition_name) in downstream {
+            let is_internal = folder_name == root_folder && datacenter == root_datacenter;
+            nodes.push(DependencyNode {
+                id,
+                job_name,
+                folder_name,
+                datacenter,
+                is_internal,
+            });
+            edges.push(DependencyEdge {
+                source_id: job_id,
+                target_id: id,
+                condition_name,
+                edge_type: "out".to_string(),
+            });
+        }
+        
+        // Add root job as node
+        let root_node: (String, String) = conn.query_row(
+            "SELECT job_name, datacenter FROM jobs WHERE id = ?",
+            params![job_id],
+            |row| Ok((row.get(0)?, row.get(1)?))
+        )?;
+        nodes.insert(0, DependencyNode {
+            id: job_id,
+            job_name: root_node.0,
+            folder_name: root_folder.clone(),
+            datacenter: root_node.1,
+            is_internal: true,
+        });
+        
+        // Calculate stats
+        let total_dependencies = edges.len();
+        let internal_dependencies = edges.iter().filter(|e| {
+            nodes.iter().any(|n| n.id == e.source_id && n.is_internal) &&
+            nodes.iter().any(|n| n.id == e.target_id && n.is_internal)
+        }).count();
+        let external_dependencies = total_dependencies - internal_dependencies;
+        
+        Ok(DependencyGraph {
+            root_job_id: job_id,
+            nodes,
+            edges,
+            stats: DependencyStats {
+                total_dependencies,
+                internal_dependencies,
+                external_dependencies,
+                max_depth: 1, // TODO: Calculate actual depth with BFS
+            },
+        })
+    }
+
+    pub fn get_dashboard_stats(&self, folder_filter: Option<&str>, datacenter_filter: Option<&str>) -> Result<DashboardStats> {
+        let conn = self.conn.lock().unwrap();
+        
+        // Build WHERE clause based on filters
+        let mut conditions = Vec::new();
+        
+        // Folder order method filter - need to join with folders table
+        match folder_filter {
+            Some("with") => conditions.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = jobs.folder_name AND f.datacenter = jobs.datacenter AND f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
+            Some("without") => conditions.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = jobs.folder_name AND f.datacenter = jobs.datacenter AND (f.folder_order_method IS NULL OR f.folder_order_method = ''))".to_string()),
+            _ => {}
+        }
+        
+        // Datacenter filter - use datacenter column from jobs table
+        if let Some(dc) = datacenter_filter {
+            if !dc.is_empty() {
+                conditions.push(format!("datacenter = '{}'", dc.replace("'", "''")));
+            }
+        }
+        
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+        
+        tracing::info!("Dashboard stats - folder_filter: {:?}, datacenter: {:?}, SQL: {}", folder_filter, datacenter_filter, where_clause);
+        
+        let total_jobs: u32 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM jobs WHERE {}", where_clause),
+            [],
+            |row| row.get(0)
+        )?;
+        let total_folders: u32 = conn.query_row(
+            &format!("SELECT COUNT(DISTINCT folder_name) FROM jobs WHERE {}", where_clause),
+            [],
+            |row| row.get(0)
+        )?;
+        let critical_jobs: u32 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM jobs WHERE critical = 1 AND ({})", where_clause),
+            [],
+            |row| row.get(0)
+        )?;
+        let cyclic_jobs: u32 = conn.query_row(
+            &format!("SELECT COUNT(*) FROM jobs WHERE cyclic = 1 AND ({})", where_clause),
+            [],
+            |row| row.get(0)
+        )?;
         
         let file_transfer_jobs: u32 = conn.query_row(
-            "SELECT COUNT(*) FROM jobs WHERE appl_type = 'FILE_TRANS' OR appl_type = 'FileWatch'",
+            &format!("SELECT COUNT(*) FROM jobs WHERE (appl_type = 'FILE_TRANS' OR appl_type = 'FileWatch') AND ({})", where_clause),
             [],
             |row| row.get(0)
         )?;
         
         let cli_jobs: u32 = conn.query_row(
-            "SELECT COUNT(*) FROM jobs WHERE task_type = 'Command' OR task_type = 'Script' OR cmdline IS NOT NULL",
+            &format!("SELECT COUNT(*) FROM jobs WHERE (task_type = 'Command' OR task_type = 'Script' OR cmdline IS NOT NULL) AND ({})", where_clause),
             [],
             |row| row.get(0)
         )?;
         
-        let mut stmt = conn.prepare("SELECT application, COUNT(*) as count FROM jobs WHERE application IS NOT NULL GROUP BY application ORDER BY count DESC LIMIT 10")?;
+        let mut stmt = conn.prepare(&format!("SELECT application, COUNT(*) as count FROM jobs WHERE application IS NOT NULL AND ({}) GROUP BY application ORDER BY count DESC LIMIT 50", where_clause))?;
         let jobs_by_application = stmt.query_map([], |row| {
             Ok(ApplicationStat {
                 application: row.get(0)?,
@@ -698,7 +964,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT folder_name, COUNT(*) as count FROM jobs GROUP BY folder_name ORDER BY count DESC LIMIT 10")?;
+        let mut stmt = conn.prepare(&format!("SELECT folder_name, COUNT(*) as count FROM jobs WHERE {} GROUP BY folder_name ORDER BY count DESC LIMIT 50", where_clause))?;
         let jobs_by_folder = stmt.query_map([], |row| {
             Ok(FolderStat {
                 folder_name: row.get(0)?,
@@ -706,7 +972,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT COALESCE(task_type, 'Unknown'), COUNT(*) as count FROM jobs GROUP BY task_type ORDER BY count DESC")?;
+        let mut stmt = conn.prepare(&format!("SELECT COALESCE(task_type, 'Unknown'), COUNT(*) as count FROM jobs WHERE {} GROUP BY task_type ORDER BY count DESC", where_clause))?;
         let jobs_by_task_type = stmt.query_map([], |row| {
             Ok(TaskTypeStat {
                 task_type: row.get(0)?,
@@ -714,7 +980,7 @@ impl JobRepository {
             })
         })?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT COALESCE(appl_type, 'Unknown'), COUNT(*) as count FROM jobs GROUP BY appl_type ORDER BY count DESC")?;
+        let mut stmt = conn.prepare(&format!("SELECT COALESCE(appl_type, 'Unknown'), COUNT(*) as count FROM jobs WHERE {} GROUP BY appl_type ORDER BY count DESC", where_clause))?;
         let jobs_by_appl_type = stmt.query_map([], |row| {
             Ok(ApplTypeStat {
                 appl_type: row.get(0)?,
@@ -736,45 +1002,79 @@ impl JobRepository {
         })
     }
 
-    pub fn get_filter_options(&self) -> Result<FilterOptions> {
+    pub fn get_filter_options(&self, datacenter_filter: Option<&str>) -> Result<FilterOptions> {
         let conn = self.conn.lock().unwrap();
         
-        let mut stmt = conn.prepare("SELECT DISTINCT application FROM jobs WHERE application IS NOT NULL ORDER BY application")?;
+        // Build WHERE clause for datacenter filter
+        let datacenter_condition = if let Some(dc) = datacenter_filter {
+            if !dc.is_empty() {
+                format!("f.datacenter = '{}'", dc.replace("'", "''"))
+            } else {
+                "1=1".to_string()
+            }
+        } else {
+            "1=1".to_string()
+        };
+        
+        tracing::info!("Filter options - datacenter: {:?}, SQL condition: {}", datacenter_filter, datacenter_condition);
+        
+        // Get applications filtered by datacenter
+        let mut stmt = conn.prepare(&format!(
+            "SELECT DISTINCT j.application FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE j.application IS NOT NULL AND {} ORDER BY j.application",
+            datacenter_condition
+        ))?;
         let applications = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT DISTINCT folder_name FROM jobs ORDER BY folder_name")?;
+        // Get folders filtered by datacenter
+        let mut stmt = conn.prepare(&format!(
+            "SELECT DISTINCT j.folder_name FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE {} ORDER BY j.folder_name",
+            datacenter_condition
+        ))?;
         let folders = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
         
-        let mut stmt = conn.prepare("SELECT DISTINCT task_type FROM jobs WHERE task_type IS NOT NULL ORDER BY task_type")?;
+        // Get task types filtered by datacenter
+        let mut stmt = conn.prepare(&format!(
+            "SELECT DISTINCT j.task_type FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE j.task_type IS NOT NULL AND {} ORDER BY j.task_type",
+            datacenter_condition
+        ))?;
         let task_types = stmt.query_map([], |row| row.get(0))?.collect::<Result<Vec<_>, _>>()?;
         
-        let appl_type_options: Vec<String> = conn.prepare(
-            "SELECT DISTINCT appl_type FROM jobs WHERE appl_type IS NOT NULL AND appl_type != '' ORDER BY appl_type"
-        )?
+        // Get appl_type filtered by datacenter
+        let appl_type_options: Vec<String> = conn.prepare(&format!(
+            "SELECT DISTINCT j.appl_type FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE j.appl_type IS NOT NULL AND j.appl_type != '' AND {} ORDER BY j.appl_type",
+            datacenter_condition
+        ))?
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
-        let appl_ver_options: Vec<String> = conn.prepare(
-            "SELECT DISTINCT appl_ver FROM jobs WHERE appl_ver IS NOT NULL AND appl_ver != '' ORDER BY appl_ver"
-        )?
+        // Get appl_ver filtered by datacenter
+        let appl_ver_options: Vec<String> = conn.prepare(&format!(
+            "SELECT DISTINCT j.appl_ver FROM jobs j JOIN folders f ON j.folder_name = f.folder_name WHERE j.appl_ver IS NOT NULL AND j.appl_ver != '' AND {} ORDER BY j.appl_ver",
+            datacenter_condition
+        ))?
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
+        // Get all datacenters (not filtered)
         let datacenters: Vec<String> = conn.prepare(
             "SELECT DISTINCT datacenter FROM folders WHERE datacenter IS NOT NULL AND datacenter != '' ORDER BY datacenter"
         )?
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
-        let mut folder_order_methods: Vec<String> = conn.prepare(
-            "SELECT DISTINCT folder_order_method FROM folders WHERE folder_order_method IS NOT NULL AND folder_order_method != '' ORDER BY folder_order_method"
-        )?
+        // Get folder_order_methods filtered by datacenter
+        let mut folder_order_methods: Vec<String> = conn.prepare(&format!(
+            "SELECT DISTINCT f.folder_order_method FROM folders f WHERE f.folder_order_method IS NOT NULL AND f.folder_order_method != '' AND {} ORDER BY f.folder_order_method",
+            datacenter_condition
+        ))?
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
         
         // Add special "(Empty)" option for folders without folder_order_method
-        let empty_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM folders WHERE folder_order_method IS NULL OR folder_order_method = ''",
+        let empty_count: i64 = conn.query_row(&format!(
+            "SELECT COUNT(*) FROM folders f WHERE (f.folder_order_method IS NULL OR f.folder_order_method = '') AND {}",
+            datacenter_condition
+        ),
             [],
             |row| row.get(0)
         )?;
@@ -1347,5 +1647,58 @@ impl JobRepository {
         }
         
         Ok(())
+    }
+
+    /// Calculate end-to-end dependencies count for a specific job
+    pub fn get_e2e_dependencies_count(&self, job_id: i64) -> Result<u32> {
+        let conn = self.conn.lock().unwrap();
+        
+        let count: u32 = conn.query_row(
+            r#"
+            WITH RECURSIVE dep_tree AS (
+                -- Base case: direct dependencies (jobs that this job depends on)
+                SELECT DISTINCT j2.id as dep_job_id, 1 as depth
+                FROM in_conditions ic
+                JOIN jobs j2 ON (
+                    j2.job_name = ic.condition_name 
+                    OR j2.job_name = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                        ic.condition_name,
+                        '-ENDED-OK', ''),
+                        '-ENDED-NOTOK', ''),
+                        '_ENDED_OK', ''),
+                        '_ENDED_NOTOK', ''),
+                        '-ENDED', ''),
+                        '-OK', '')
+                    OR j2.job_name = REPLACE(ic.condition_name, '-NOTOK', '')
+                )
+                WHERE ic.job_id = ?
+                
+                UNION
+                
+                -- Recursive case: transitive dependencies
+                SELECT DISTINCT j3.id as dep_job_id, dt.depth + 1
+                FROM dep_tree dt
+                JOIN in_conditions ic2 ON ic2.job_id = dt.dep_job_id
+                JOIN jobs j3 ON (
+                    j3.job_name = ic2.condition_name 
+                    OR j3.job_name = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                        ic2.condition_name,
+                        '-ENDED-OK', ''),
+                        '-ENDED-NOTOK', ''),
+                        '_ENDED_OK', ''),
+                        '_ENDED_NOTOK', ''),
+                        '-ENDED', ''),
+                        '-OK', '')
+                    OR j3.job_name = REPLACE(ic2.condition_name, '-NOTOK', '')
+                )
+                WHERE dt.depth < 10
+            )
+            SELECT COUNT(DISTINCT dep_job_id) FROM dep_tree
+            "#,
+            [job_id],
+            |row| row.get(0)
+        )?;
+        
+        Ok(count)
     }
 }

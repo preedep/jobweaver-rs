@@ -8,6 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/css/modal-tabs.css">
+    <link rel="stylesheet" href="/css/root-jobs.css">
 </head>
 <body>
     <!-- Login Page -->
@@ -100,6 +101,36 @@
                     <p>Control-M Job Analysis & Migration Planning Overview</p>
                 </div>
                 
+                <!-- Dashboard Filter -->
+                <div class="filter-card-modern" style="margin-bottom: 24px;">
+                    <div class="filter-card-header">
+                        <div class="filter-card-title">
+                            <i class="fas fa-filter"></i>
+                            <h3>View Options</h3>
+                        </div>
+                        <div class="filter-card-actions" style="display: flex; gap: 24px;">
+                            <div class="form-group-modern" style="margin: 0; display: flex; align-items: center; gap: 12px;">
+                                <label for="dashboard-datacenter-filter" style="margin: 0; font-weight: 500; color: #64748b;">
+                                    <i class="fas fa-server"></i> Datacenter:
+                                </label>
+                                <select id="dashboard-datacenter-filter" class="select-modern" style="min-width: 200px;">
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group-modern" style="margin: 0; display: flex; align-items: center; gap: 12px;">
+                                <label for="dashboard-folder-filter" style="margin: 0; font-weight: 500; color: #64748b;">
+                                    <i class="fas fa-sort"></i> Folder Order Method:
+                                </label>
+                                <select id="dashboard-folder-filter" class="select-modern" style="min-width: 200px;">
+                                    <option value="">All Jobs</option>
+                                    <option value="with">With FOLDER_ORDER_METHOD</option>
+                                    <option value="without">Without FOLDER_ORDER_METHOD</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Key Metrics Grid -->
                 <div class="dashboard-grid">
                     <div class="stat-card">
@@ -154,6 +185,29 @@
                         <div class="stat-content">
                             <h3 id="stat-file-transfer">0</h3>
                             <p>File Transfer Jobs</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Root Jobs -->
+                <div class="dashboard-section">
+                    <h2><i class="fas fa-project-diagram"></i> Top Root Jobs - Migration Candidates</h2>
+                    <div class="chart-card">
+                        <div class="chart-header" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h3><i class="fas fa-rocket"></i> Root Jobs with Most Dependencies</h3>
+                                <p class="chart-subtitle">Jobs that start dependency chains - ideal migration candidates</p>
+                            </div>
+                            <button class="btn btn-primary" onclick="openRootJobsModal()">
+                                <i class="fas fa-expand"></i> View All
+                            </button>
+                        </div>
+                        <div class="chart-body">
+                            <div id="root-jobs-list" class="root-jobs-container">
+                                <div class="loading-state">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading root jobs...
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -348,7 +402,7 @@
                                         <i class="fas fa-server"></i> Datacenter
                                     </label>
                                     <select id="filter-datacenter" class="select2-dropdown select-modern">
-                                        <option value="">All Datacenters</option>
+                                        <!-- Options will be populated dynamically, no 'All' option -->
                                     </select>
                                 </div>
                                 <div class="form-group-modern">
@@ -517,18 +571,19 @@
                                     <th data-sort="task_type">Task Type <i class="fas fa-sort"></i></th>
                                     <th data-sort="critical">Critical <i class="fas fa-sort"></i></th>
                                     <th data-sort="cyclic">Cyclic <i class="fas fa-sort"></i></th>
-                                    <th>Node ID</th>
-                                    <th>Group</th>
-                                    <th>Memname</th>
-                                    <th>Owner</th>
-                                    <th>MaxWait</th>
-                                    <th>MaxRerun</th>
-                                    <th>Shift</th>
+                                    <th data-sort="node_id">Node ID <i class="fas fa-sort"></i></th>
+                                    <th data-sort="job_group">Group <i class="fas fa-sort"></i></th>
+                                    <th data-sort="memname">Memname <i class="fas fa-sort"></i></th>
+                                    <th data-sort="owner">Owner <i class="fas fa-sort"></i></th>
+                                    <th data-sort="maxwait">MaxWait <i class="fas fa-sort"></i></th>
+                                    <th data-sort="maxrerun">MaxRerun <i class="fas fa-sort"></i></th>
+                                    <th data-sort="shift">Shift <i class="fas fa-sort"></i></th>
                                     <th>Resources</th>
                                     <th>Variables</th>
                                     <th>In Deps</th>
                                     <th>Out Deps</th>
                                     <th>ON Conds</th>
+                                    <th data-sort="total_dependencies_e2e">E2E Deps <i class="fas fa-sort"></i></th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -629,6 +684,89 @@
                     </div>
                     
                     <div id="tab-dependencies" class="tab-content">
+                        <div class="detail-section">
+                            <h3>Dependency Graph</h3>
+                            
+                            <!-- Advanced Controls -->
+                            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                                    <!-- Scope Filter -->
+                                    <div>
+                                        <label style="display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 5px;">
+                                            <i class="fas fa-filter"></i> Scope
+                                        </label>
+                                        <div class="dependency-filter-buttons">
+                                            <button class="btn btn-sm active" data-filter="all">All</button>
+                                            <button class="btn btn-sm" data-filter="internal">Internal</button>
+                                            <button class="btn btn-sm" data-filter="external">External</button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Depth Control -->
+                                    <div>
+                                        <label style="display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 5px;">
+                                            <i class="fas fa-layer-group"></i> Max Depth
+                                        </label>
+                                        <select id="graph-depth-control" class="form-control" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                                            <option value="1">1 Level (Direct only)</option>
+                                            <option value="2" selected>2 Levels</option>
+                                            <option value="3">3 Levels</option>
+                                            <option value="99">All Levels</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- View Mode -->
+                                    <div>
+                                        <label style="display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 5px;">
+                                            <i class="fas fa-eye"></i> View Mode
+                                        </label>
+                                        <select id="graph-view-mode" class="form-control" style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                                            <option value="hierarchical">Hierarchical</option>
+                                            <option value="radial">Radial</option>
+                                            <option value="force">Force-Directed</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Search -->
+                                    <div>
+                                        <label style="display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 5px;">
+                                            <i class="fas fa-search"></i> Search Job
+                                        </label>
+                                        <input type="text" id="graph-search" class="form-control" placeholder="Type job name..." style="width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                                    </div>
+                                </div>
+                                
+                                <!-- Action Buttons -->
+                                <div style="margin-top: 10px; display: flex; gap: 10px; justify-content: flex-end;">
+                                    <button class="btn btn-sm" onclick="resetGraphView()" title="Reset view">
+                                        <i class="fas fa-undo"></i> Reset
+                                    </button>
+                                    <button class="btn btn-sm" onclick="fitGraphView()" title="Fit to screen">
+                                        <i class="fas fa-compress"></i> Fit
+                                    </button>
+                                    <button class="btn btn-sm" onclick="exportGraphImage()" title="Export as image">
+                                        <i class="fas fa-download"></i> Export
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="dependency-graph-container" style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 4px; margin-top: 10px; background: #fafafa;">
+                                <div class="loading" style="display: flex; align-items: center; justify-content: center; height: 100%;">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading dependency graph...
+                                </div>
+                            </div>
+                            <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                                <div id="dependency-stats" style="padding: 10px; background: #f5f5f5; border-radius: 4px; flex: 1;">
+                                    <strong>Statistics:</strong>
+                                    <span id="dep-total">0</span> total dependencies
+                                    (<span id="dep-internal">0</span> internal, <span id="dep-external">0</span> external)
+                                </div>
+                                <div style="padding: 10px; background: #f5f5f5; border-radius: 4px; margin-left: 10px; display: flex; gap: 15px; font-size: 12px;">
+                                    <span><span style="display: inline-block; width: 12px; height: 12px; background: #2196F3; border-radius: 2px; margin-right: 5px;"></span> Root Job</span>
+                                    <span><span style="display: inline-block; width: 12px; height: 12px; background: #4CAF50; border-radius: 2px; margin-right: 5px;"></span> Internal</span>
+                                    <span><span style="display: inline-block; width: 12px; height: 12px; background: #FF9800; border-radius: 2px; margin-right: 5px;"></span> External</span>
+                                </div>
+                            </div>
+                        </div>
                         <div class="detail-section">
                             <h3>In Conditions <span class="badge badge-success" id="in-cond-count">0</span></h3>
                             <div id="in-conditions-list"></div>
@@ -785,6 +923,82 @@
             </div>
         </div>
 
+        <!-- Chart Detail Modal -->
+        <div id="chart-detail-modal" class="modal">
+            <div class="modal-content modal-content-xlarge">
+                <div class="modal-header">
+                    <div>
+                        <h2 id="chart-modal-title">Chart Details</h2>
+                        <p class="modal-subtitle" id="chart-modal-subtitle"></p>
+                    </div>
+                    <div class="modal-header-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="exportChartData()">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                        <button class="close-modal" onclick="closeChartModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="modal-body chart-modal-body">
+                    <div class="chart-detail-container">
+                        <!-- Left: Enhanced Chart -->
+                        <div class="chart-detail-main">
+                            <div class="chart-controls">
+                                <div class="form-group-modern">
+                                    <label><i class="fas fa-search"></i> Search:</label>
+                                    <input type="text" id="chart-search" class="input-modern" placeholder="Filter items...">
+                                </div>
+                                <div class="form-group-modern">
+                                    <label><i class="fas fa-sort"></i> Sort:</label>
+                                    <select id="chart-sort" class="select-modern">
+                                        <option value="count-desc">Count (High to Low)</option>
+                                        <option value="count-asc">Count (Low to High)</option>
+                                        <option value="name-asc">Name (A to Z)</option>
+                                        <option value="name-desc">Name (Z to A)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group-modern">
+                                    <label><i class="fas fa-list"></i> Show:</label>
+                                    <select id="chart-limit" class="select-modern">
+                                        <option value="10" selected>Top 10</option>
+                                        <option value="20">Top 20</option>
+                                        <option value="50">Top 50</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="chart-detail-canvas" class="chart-detail-canvas"></div>
+                        </div>
+                        
+                        <!-- Right: Statistics Panel -->
+                        <div class="chart-detail-sidebar">
+                            <div class="stats-panel">
+                                <h3><i class="fas fa-chart-bar"></i> Statistics</h3>
+                                <div class="stats-grid" id="chart-stats-grid">
+                                    <!-- Stats will be populated dynamically -->
+                                </div>
+                            </div>
+                            
+                            <div class="stats-panel">
+                                <h3><i class="fas fa-table"></i> Data Table</h3>
+                                <div class="chart-data-table" id="chart-data-table">
+                                    <!-- Table will be populated dynamically -->
+                                </div>
+                            </div>
+                            
+                            <div class="stats-panel" id="chart-insights-panel">
+                                <h3><i class="fas fa-lightbulb"></i> Insights</h3>
+                                <div id="chart-insights">
+                                    <!-- Insights will be populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Loading Overlay -->
         <div id="loading-overlay" class="loading-overlay">
             <div class="spinner-container">
@@ -794,10 +1008,62 @@
         </div>
     </div>
 
+    <!-- Root Jobs Modal -->
+    <div id="root-jobs-modal" class="modal">
+        <div class="modal-content modal-content-xlarge">
+            <div class="modal-header">
+                <div>
+                    <h2><i class="fas fa-rocket"></i> Root Jobs - Migration Candidates</h2>
+                    <p class="modal-subtitle">Jobs that start dependency chains within the same folder</p>
+                </div>
+                <div class="modal-header-actions">
+                    <button class="close-modal" onclick="closeRootJobsModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Controls -->
+                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 15px;">
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 5px;">
+                                <i class="fas fa-list"></i> Show Top
+                            </label>
+                            <select id="root-jobs-modal-limit" class="select-modern" style="min-width: 150px;">
+                                <option value="10" selected>Top 10</option>
+                                <option value="20">Top 20</option>
+                                <option value="50">Top 50</option>
+                                <option value="100">Top 100</option>
+                            </select>
+                        </div>
+                        <div style="flex: 2;">
+                            <label style="display: block; font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 5px;">
+                                <i class="fas fa-search"></i> Search Job Name
+                            </label>
+                            <input type="text" id="root-jobs-search" class="form-control" placeholder="Type to filter..." style="width: 100%;">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Root Jobs List -->
+                <div id="root-jobs-modal-list" class="root-jobs-container">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i> Loading root jobs...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="/js/app.js"></script>
     <script src="/js/modal-enhanced.js"></script>
+    <script src="/js/chart-detail.js"></script>
+    <script src="/js/dependency-graph.js"></script>
+    <script src="/js/root-jobs.js"></script>
 </body>
 </html>

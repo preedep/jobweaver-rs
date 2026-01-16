@@ -209,6 +209,7 @@ pub struct JobDetail {
     pub on_conditions_count: u32,
     pub control_resources_count: u32,
     pub variables_count: u32,
+    pub total_dependencies_e2e: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -222,7 +223,7 @@ pub struct JobDetailFull {
     pub quantitative_resources: Vec<QuantitativeResource>,
     pub variables: Vec<Variable>,
     pub auto_edits: Vec<Variable>,
-    pub metadata: Vec<Variable>,
+    pub metadata: Vec<JobMetadata>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -275,6 +276,65 @@ pub struct QuantitativeResource {
 pub struct Variable {
     pub name: String,
     pub value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DashboardFilter {
+    pub folder_order_method_filter: Option<String>,
+    pub datacenter: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DatacenterFilter {
+    pub datacenter: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DependencyNode {
+    pub id: i64,
+    pub job_name: String,
+    pub folder_name: String,
+    pub datacenter: String,
+    pub is_internal: bool, // true if same folder as root job
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DependencyEdge {
+    pub source_id: i64,
+    pub target_id: i64,
+    pub condition_name: String,
+    pub edge_type: String, // "in" or "out"
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DependencyGraph {
+    pub root_job_id: i64,
+    pub nodes: Vec<DependencyNode>,
+    pub edges: Vec<DependencyEdge>,
+    pub stats: DependencyStats,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DependencyStats {
+    pub total_dependencies: usize,
+    pub internal_dependencies: usize,
+    pub external_dependencies: usize,
+    pub max_depth: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JobMetadata {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RootJobStat {
+    pub id: i64,
+    pub job_name: String,
+    pub folder_name: String,
+    pub datacenter: String,
+    pub downstream_count: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
