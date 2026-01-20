@@ -695,7 +695,7 @@ function renderBarChart(containerId, data, labelKey, valueKey) {
                 <div class="chart-bar-container">
                     <div class="chart-bar-fill" style="width: ${percentage}%"></div>
                 </div>
-                <div class="chart-value">${item[valueKey]}</div>
+                <div class="chart-value">${item[valueKey].toLocaleString()}</div>
             </div>
         `;
     }).join('');
@@ -730,7 +730,7 @@ function renderComplexityChart(containerId, data) {
                 <div class="chart-bar-container">
                     <div class="chart-bar-fill" style="width: ${percentage}%; background: ${item.color}"></div>
                 </div>
-                <div class="chart-value">${item.value}</div>
+                <div class="chart-value">${item.value.toLocaleString()}</div>
             </div>
         `;
     }).join('');

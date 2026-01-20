@@ -96,108 +96,117 @@ async function loadDependencyGraph(jobId) {
 }
 
 /**
- * Render dependency graph using vis.js hierarchical directed graph
+ * Apply scope filter to nodes and edges
  */
-function renderDependencyGraph(graphData, filter = 'all', maxDepth = 2, viewMode = 'hierarchical') {
-    const container = document.getElementById('dependency-graph-container');
-    if (!container) return;
-    
-    // Apply depth filter first
-    let depthFiltered = filterGraphByDepth(graphData, maxDepth);
-    
-    // Then apply scope filter
-    let filteredNodes = depthFiltered.nodes;
-    let filteredEdges = depthFiltered.edges;
+function applyScopeFilter(nodes, edges, filter, rootJobId) {
+    let filteredNodes = nodes;
+    let filteredEdges = edges;
     
     if (filter === 'internal') {
-        filteredNodes = filteredNodes.filter(n => n.is_internal);
-        filteredEdges = filteredEdges.filter(e => {
-            const source = filteredNodes.find(n => n.id === e.source_id);
-            const target = filteredNodes.find(n => n.id === e.target_id);
-            return source && target;
-        });
+        filteredNodes = nodes.filter(n => n.is_internal);
+        const nodeIds = new Set(filteredNodes.map(n => n.id));
+        filteredEdges = edges.filter(e => 
+            nodeIds.has(e.source_id) && nodeIds.has(e.target_id)
+        );
     } else if (filter === 'external') {
-        filteredNodes = filteredNodes.filter(n => !n.is_internal || n.id === graphData.root_job_id);
-        filteredEdges = filteredEdges.filter(e => {
+        filteredNodes = nodes.filter(n => !n.is_internal || n.id === rootJobId);
+        const nodeIds = new Set(filteredNodes.map(n => n.id));
+        filteredEdges = edges.filter(e => {
+            if (!nodeIds.has(e.source_id) || !nodeIds.has(e.target_id)) return false;
             const source = filteredNodes.find(n => n.id === e.source_id);
             const target = filteredNodes.find(n => n.id === e.target_id);
-            return source && target && (!source.is_internal || !target.is_internal);
+            return !source.is_internal || !target.is_internal;
         });
     }
     
-    if (filteredNodes.length === 0) {
-        container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No dependencies to display</div>';
-        return;
+    return { nodes: filteredNodes, edges: filteredEdges };
+}
+
+/**
+ * Get node color configuration
+ */
+function getNodeColors(isRoot, isInternal) {
+    if (isRoot) {
+        return {
+            background: '#2196F3',
+            border: '#1976D2',
+            highlight: { background: '#1976D2', border: '#0D47A1' }
+        };
     }
     
-    // Clear container
-    container.innerHTML = '';
-    
-    // Prepare nodes for vis.js
-    const visNodes = filteredNodes.map(node => {
-        const isRoot = node.id === graphData.root_job_id;
-        const isInternal = node.is_internal;
-        
+    if (isInternal) {
         return {
-            id: node.id,
-            label: truncateText(node.job_name, 25),
-            title: `${node.job_name}\n${node.folder_name}\n${node.datacenter}`,
-            color: {
-                background: isRoot ? '#2196F3' : (isInternal ? '#4CAF50' : '#FF9800'),
-                border: isRoot ? '#1976D2' : (isInternal ? '#388E3C' : '#F57C00'),
-                highlight: {
-                    background: isRoot ? '#1976D2' : (isInternal ? '#66BB6A' : '#FFB74D'),
-                    border: isRoot ? '#0D47A1' : (isInternal ? '#2E7D32' : '#E65100')
-                }
-            },
-            font: {
-                color: '#ffffff',
-                size: isRoot ? 14 : 12,
-                face: 'Arial',
-                bold: isRoot
-            },
-            shape: 'box',
-            margin: 10,
-            borderWidth: 2,
-            shadow: true,
-            level: undefined // Will be set based on hierarchy
+            background: '#4CAF50',
+            border: '#388E3C',
+            highlight: { background: '#66BB6A', border: '#2E7D32' }
         };
-    });
+    }
     
-    // Prepare edges for vis.js
-    const visEdges = filteredEdges.map(edge => {
-        const source = filteredNodes.find(n => n.id === edge.source_id);
-        const target = filteredNodes.find(n => n.id === edge.target_id);
-        const isInternal = source && target && source.is_internal && target.is_internal;
-        
-        return {
-            from: edge.source_id,
-            to: edge.target_id,
-            arrows: 'to',
-            color: {
-                color: isInternal ? '#4CAF50' : '#FF9800',
-                highlight: isInternal ? '#66BB6A' : '#FFB74D'
-            },
-            width: 2,
-            smooth: {
-                type: 'cubicBezier',
-                forceDirection: 'vertical',
-                roundness: 0.4
-            },
-            title: edge.condition_name
-        };
-    });
-    
-    // Create vis.js network
-    const data = {
-        nodes: new vis.DataSet(visNodes),
-        edges: new vis.DataSet(visEdges)
+    return {
+        background: '#FF9800',
+        border: '#F57C00',
+        highlight: { background: '#FFB74D', border: '#E65100' }
     };
+}
+
+/**
+ * Create vis.js node configuration
+ */
+function createVisNode(node, rootJobId) {
+    const isRoot = node.id === rootJobId;
+    const isInternal = node.is_internal;
     
-    // Configure layout based on view mode
-    let layoutConfig = {};
+    return {
+        id: node.id,
+        label: truncateText(node.job_name, 25),
+        title: `${node.job_name}\n${node.folder_name}\n${node.datacenter}`,
+        color: getNodeColors(isRoot, isInternal),
+        font: {
+            color: '#ffffff',
+            size: isRoot ? 14 : 12,
+            face: 'Arial',
+            bold: isRoot
+        },
+        shape: 'box',
+        margin: 10,
+        borderWidth: 2,
+        shadow: true,
+        level: undefined
+    };
+}
+
+/**
+ * Create vis.js edge configuration
+ */
+function createVisEdge(edge, nodeMap) {
+    const source = nodeMap.get(edge.source_id);
+    const target = nodeMap.get(edge.target_id);
+    const isInternal = source && target && source.is_internal && target.is_internal;
+    
+    return {
+        from: edge.source_id,
+        to: edge.target_id,
+        arrows: 'to',
+        color: {
+            color: isInternal ? '#4CAF50' : '#FF9800',
+            highlight: isInternal ? '#66BB6A' : '#FFB74D'
+        },
+        width: 2,
+        smooth: {
+            type: 'cubicBezier',
+            forceDirection: 'vertical',
+            roundness: 0.4
+        },
+        title: edge.condition_name
+    };
+}
+
+/**
+ * Get layout configuration based on view mode
+ */
+function getLayoutConfig(viewMode) {
     if (viewMode === 'hierarchical') {
-        layoutConfig = {
+        return {
             hierarchical: {
                 enabled: true,
                 direction: 'UD',
@@ -207,8 +216,10 @@ function renderDependencyGraph(graphData, filter = 'all', maxDepth = 2, viewMode
                 treeSpacing: 200
             }
         };
-    } else if (viewMode === 'radial') {
-        layoutConfig = {
+    }
+    
+    if (viewMode === 'radial') {
+        return {
             hierarchical: {
                 enabled: true,
                 direction: 'UD',
@@ -219,17 +230,18 @@ function renderDependencyGraph(graphData, filter = 'all', maxDepth = 2, viewMode
                 shakeTowards: 'roots'
             }
         };
-    } else {
-        layoutConfig = {
-            improvedLayout: true
-        };
     }
     
-    const options = {
-        layout: layoutConfig,
-        physics: {
-            enabled: false
-        },
+    return { improvedLayout: true };
+}
+
+/**
+ * Create vis.js network options
+ */
+function createNetworkOptions(viewMode) {
+    return {
+        layout: getLayoutConfig(viewMode),
+        physics: { enabled: false },
         interaction: {
             hover: true,
             tooltipDelay: 100,
@@ -239,9 +251,7 @@ function renderDependencyGraph(graphData, filter = 'all', maxDepth = 2, viewMode
         nodes: {
             shape: 'box',
             margin: 10,
-            widthConstraint: {
-                maximum: 200
-            }
+            widthConstraint: { maximum: 200 }
         },
         edges: {
             smooth: {
@@ -250,30 +260,29 @@ function renderDependencyGraph(graphData, filter = 'all', maxDepth = 2, viewMode
             }
         }
     };
-    
-    // Destroy existing network if any
-    if (window.dependencyNetwork) {
-        window.dependencyNetwork.destroy();
-    }
-    
-    // Create new network
-    window.dependencyNetwork = new vis.Network(container, data, options);
-    
-    // Add click event to nodes
-    window.dependencyNetwork.on('click', function(params) {
+}
+
+/**
+ * Setup network event handlers
+ */
+function setupNetworkEvents(network, filteredNodes) {
+    network.on('click', function(params) {
         if (params.nodes.length > 0) {
             const nodeId = params.nodes[0];
             const node = filteredNodes.find(n => n.id === nodeId);
             if (node) {
                 console.log('Clicked node:', node);
-                // Could open job detail here
             }
         }
     });
-    
-    // Fit network to container
+}
+
+/**
+ * Fit network to container with animation
+ */
+function fitNetworkToContainer(network) {
     setTimeout(() => {
-        window.dependencyNetwork.fit({
+        network.fit({
             animation: {
                 duration: 500,
                 easingFunction: 'easeInOutQuad'
@@ -283,12 +292,52 @@ function renderDependencyGraph(graphData, filter = 'all', maxDepth = 2, viewMode
 }
 
 /**
+ * Render dependency graph using vis.js hierarchical directed graph
+ */
+function renderDependencyGraph(graphData, filter = 'all', maxDepth = 2, viewMode = 'hierarchical') {
+    const container = document.getElementById('dependency-graph-container');
+    if (!container) return;
+    
+    const depthFiltered = filterGraphByDepth(graphData, maxDepth);
+    const { nodes: filteredNodes, edges: filteredEdges } = applyScopeFilter(
+        depthFiltered.nodes,
+        depthFiltered.edges,
+        filter,
+        graphData.root_job_id
+    );
+    
+    if (filteredNodes.length === 0) {
+        container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No dependencies to display</div>';
+        return;
+    }
+    
+    container.innerHTML = '';
+    
+    const nodeMap = new Map(filteredNodes.map(n => [n.id, n]));
+    const visNodes = filteredNodes.map(node => createVisNode(node, graphData.root_job_id));
+    const visEdges = filteredEdges.map(edge => createVisEdge(edge, nodeMap));
+    
+    const data = {
+        nodes: new vis.DataSet(visNodes),
+        edges: new vis.DataSet(visEdges)
+    };
+    
+    if (window.dependencyNetwork) {
+        window.dependencyNetwork.destroy();
+    }
+    
+    window.dependencyNetwork = new vis.Network(container, data, createNetworkOptions(viewMode));
+    setupNetworkEvents(window.dependencyNetwork, filteredNodes);
+    fitNetworkToContainer(window.dependencyNetwork);
+}
+
+/**
  * Update dependency statistics display
  */
 function updateDependencyStats(stats) {
-    document.getElementById('dep-total').textContent = stats.total_dependencies;
-    document.getElementById('dep-internal').textContent = stats.internal_dependencies;
-    document.getElementById('dep-external').textContent = stats.external_dependencies;
+    document.getElementById('dep-total').textContent = stats.total_dependencies.toLocaleString();
+    document.getElementById('dep-internal').textContent = stats.internal_dependencies.toLocaleString();
+    document.getElementById('dep-external').textContent = stats.external_dependencies.toLocaleString();
 }
 
 /**
@@ -348,6 +397,94 @@ function initializeGraphControls() {
 }
 
 /**
+ * Get original node color configuration
+ */
+function getOriginalNodeColor(nodeId, originalNode, rootJobId) {
+    const isRoot = nodeId === rootJobId;
+    const isInternal = originalNode.is_internal;
+    
+    return {
+        background: isRoot ? '#2196F3' : (isInternal ? '#4CAF50' : '#FF9800'),
+        border: isRoot ? '#1976D2' : (isInternal ? '#388E3C' : '#F57C00')
+    };
+}
+
+/**
+ * Get highlight color configuration
+ */
+function getHighlightColor() {
+    return {
+        background: '#FFD700',
+        border: '#FFA500'
+    };
+}
+
+/**
+ * Reset node to original color
+ */
+function resetNodeColor(nodes, node, originalNode, rootJobId) {
+    if (!originalNode) return;
+    
+    nodes.update({
+        id: node.id,
+        color: getOriginalNodeColor(node.id, originalNode, rootJobId),
+        opacity: 1
+    });
+}
+
+/**
+ * Reset all nodes to original colors
+ */
+function resetAllNodeColors(nodes, graphData) {
+    nodes.forEach(node => {
+        const originalNode = graphData.nodes.find(n => n.id === node.id);
+        if (originalNode) {
+            resetNodeColor(nodes, node, originalNode, graphData.root_job_id);
+        }
+    });
+}
+
+/**
+ * Check if node matches search term
+ */
+function nodeMatchesSearch(originalNode, searchTerm) {
+    return originalNode && 
+           originalNode.job_name.toLowerCase().includes(searchTerm.toLowerCase());
+}
+
+/**
+ * Highlight matching node
+ */
+function highlightNode(nodes, nodeId) {
+    nodes.update({
+        id: nodeId,
+        color: getHighlightColor(),
+        opacity: 1
+    });
+}
+
+/**
+ * Dim non-matching node
+ */
+function dimNode(nodes, node, originalNode, rootJobId) {
+    nodes.update({
+        id: node.id,
+        color: getOriginalNodeColor(node.id, originalNode, rootJobId),
+        opacity: 0.3
+    });
+}
+
+/**
+ * Focus on first matching node
+ */
+function focusOnNode(network, nodeId) {
+    network.focus(nodeId, {
+        scale: 1.5,
+        animation: true
+    });
+}
+
+/**
  * Search and highlight nodes
  */
 function searchAndHighlight(searchTerm) {
@@ -356,59 +493,26 @@ function searchAndHighlight(searchTerm) {
     const nodes = window.dependencyNetwork.body.data.nodes;
     
     if (!searchTerm) {
-        // Reset all nodes to original colors
-        nodes.forEach(node => {
-            const originalNode = currentGraphData.nodes.find(n => n.id === node.id);
-            if (originalNode) {
-                const isRoot = node.id === currentGraphData.root_job_id;
-                const isInternal = originalNode.is_internal;
-                nodes.update({
-                    id: node.id,
-                    color: {
-                        background: isRoot ? '#2196F3' : (isInternal ? '#4CAF50' : '#FF9800'),
-                        border: isRoot ? '#1976D2' : (isInternal ? '#388E3C' : '#F57C00')
-                    }
-                });
-            }
-        });
+        resetAllNodeColors(nodes, currentGraphData);
         return;
     }
     
-    // Find matching nodes
     const matchingNodes = [];
+    const searchLower = searchTerm.toLowerCase();
+    
     nodes.forEach(node => {
         const originalNode = currentGraphData.nodes.find(n => n.id === node.id);
-        if (originalNode && originalNode.job_name.toLowerCase().includes(searchTerm.toLowerCase())) {
+        
+        if (nodeMatchesSearch(originalNode, searchLower)) {
             matchingNodes.push(node.id);
-            // Highlight matching node
-            nodes.update({
-                id: node.id,
-                color: {
-                    background: '#FFD700',
-                    border: '#FFA500'
-                }
-            });
-        } else {
-            // Dim non-matching nodes
-            const isRoot = node.id === currentGraphData.root_job_id;
-            const isInternal = originalNode?.is_internal;
-            nodes.update({
-                id: node.id,
-                color: {
-                    background: isRoot ? '#2196F3' : (isInternal ? '#4CAF50' : '#FF9800'),
-                    border: isRoot ? '#1976D2' : (isInternal ? '#388E3C' : '#F57C00')
-                },
-                opacity: 0.3
-            });
+            highlightNode(nodes, node.id);
+        } else if (originalNode) {
+            dimNode(nodes, node, originalNode, currentGraphData.root_job_id);
         }
     });
     
-    // Focus on first match
     if (matchingNodes.length > 0) {
-        window.dependencyNetwork.focus(matchingNodes[0], {
-            scale: 1.5,
-            animation: true
-        });
+        focusOnNode(window.dependencyNetwork, matchingNodes[0]);
     }
 }
 
