@@ -8,6 +8,8 @@ let currentWaveFilters = {
     folderOrderMethod: 'SYSTEM'
 };
 
+let currentWaveData = null;
+
 /**
  * Initialize Wave Migration page
  */
@@ -25,65 +27,69 @@ async function initWaveMigration() {
 }
 
 /**
+ * Fetch filter options from API
+ */
+async function fetchFilterOptions() {
+    const response = await fetch(`${API_BASE}/filters`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    return response.json();
+}
+
+/**
+ * Find preferred datacenter from list
+ */
+function findPreferredDatacenter(datacenters, preferred = 'neutron') {
+    const lowerPreferred = preferred.toLowerCase();
+    const found = datacenters.find(dc => dc.toLowerCase() === lowerPreferred);
+    return found || datacenters[0] || null;
+}
+
+/**
+ * Populate datacenter dropdown
+ */
+function populateDatacenterDropdown(select, datacenters, selectedDc) {
+    select.innerHTML = '';
+    
+    datacenters.forEach(dc => {
+        const option = document.createElement('option');
+        option.value = dc;
+        option.textContent = dc;
+        option.selected = dc === selectedDc;
+        select.appendChild(option);
+    });
+}
+
+/**
  * Load datacenter options for filter
  */
 async function loadWaveDatacenterOptions() {
     try {
-        const response = await fetch(`${API_BASE}/filters`, {
-            headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        const result = await response.json();
+        const result = await fetchFilterOptions();
         
-        console.log('📊 [WAVE] Filter options received:', result);
-        console.log('📊 [WAVE] result.success:', result.success);
-        console.log('📊 [WAVE] result.data:', result.data);
-        console.log('📊 [WAVE] result.data.datacenters:', result.data?.datacenters);
-        console.log('📊 [WAVE] Is array?:', Array.isArray(result.data?.datacenters));
-        
-        if (result.success && result.data) {
-            const select = document.getElementById('wave-datacenter-filter');
-            
-            if (!select) {
-                console.error('❌ [WAVE] wave-datacenter-filter element not found!');
-                return;
-            }
-            
-            // Clear all existing options
-            select.innerHTML = '';
-            
-            // Add datacenter options
-            if (result.data.datacenters && Array.isArray(result.data.datacenters)) {
-                let hasNeutron = false;
-                let firstDC = null;
-                
-                result.data.datacenters.forEach((dc, index) => {
-                    const option = document.createElement('option');
-                    option.value = dc;
-                    option.textContent = dc;
-                    select.appendChild(option);
-                    
-                    if (index === 0) firstDC = dc;
-                    if (dc.toLowerCase() === 'neutron') {
-                        hasNeutron = true;
-                        option.selected = true;
-                    }
-                });
-                
-                // If neutron not found, select first datacenter
-                if (!hasNeutron && firstDC) {
-                    select.value = firstDC;
-                    currentWaveFilters.datacenter = firstDC;
-                    console.log('📊 [WAVE] Neutron not found, using', firstDC);
-                } else if (hasNeutron) {
-                    currentWaveFilters.datacenter = 'neutron';
-                }
-                
-                console.log('✅ [WAVE] Loaded', result.data.datacenters.length, 'datacenters');
-                console.log('📊 [WAVE] Selected datacenter:', currentWaveFilters.datacenter);
-            } else {
-                console.warn('⚠️ [WAVE] No datacenters found in response');
-            }
+        if (!result.success || !result.data?.datacenters) {
+            console.warn('⚠️ [WAVE] No datacenters found in response');
+            return;
         }
+        
+        const select = document.getElementById('wave-datacenter-filter');
+        if (!select) {
+            console.error('❌ [WAVE] wave-datacenter-filter element not found!');
+            return;
+        }
+        
+        const datacenters = result.data.datacenters;
+        if (!Array.isArray(datacenters) || datacenters.length === 0) {
+            console.warn('⚠️ [WAVE] Invalid or empty datacenters array');
+            return;
+        }
+        
+        const selectedDc = findPreferredDatacenter(datacenters);
+        populateDatacenterDropdown(select, datacenters, selectedDc);
+        
+        currentWaveFilters.datacenter = selectedDc;
+        console.log(`✅ [WAVE] Loaded ${datacenters.length} datacenters, selected: ${selectedDc}`);
+        
     } catch (error) {
         console.error('❌ [WAVE] Error loading datacenter options:', error);
     }
@@ -171,6 +177,9 @@ async function loadWaveData() {
             console.log('  - Wave 3 (Leaf):', result.data.wave3.total_jobs, 'jobs');
             console.log('  - Wave 4 (Root):', result.data.wave4.total_jobs, 'jobs');
             console.log('  - Wave 5 (Complex):', result.data.wave5.total_jobs, 'jobs');
+            
+            // Store data for CSV export
+            currentWaveData = result.data;
             
             renderWaveSummary(result.data);
             renderWaveDetails(result.data);
@@ -490,11 +499,136 @@ function renderWave5Details(data) {
 }
 
 /**
+ * Wave configuration for CSV export
+ */
+const WAVE_CONFIG = {
+    1: { name: 'Isolated_Jobs', type: 'jobs' },
+    2: { name: 'Self_Contained_Folders', type: 'folders' },
+    3: { name: 'Leaf_Jobs', type: 'jobs' },
+    4: { name: 'Root_Jobs', type: 'jobs' },
+    5: { name: 'Complex_Dependencies', type: 'folders' }
+};
+
+/**
+ * Escape CSV field value
+ */
+function escapeCsvField(value) {
+    return `"${(value || '').replace(/"/g, '""')}"`;
+}
+
+/**
+ * Generate CSV filename with date
+ */
+function generateCsvFilename(waveNumber, waveName) {
+    const date = new Date().toISOString().split('T')[0];
+    return `wave${waveNumber}_${waveName}_${date}.csv`;
+}
+
+/**
+ * Build CSV headers for jobs
+ */
+function buildJobHeaders(waveNumber) {
+    const headers = ['Job ID', 'Job Name', 'Folder Name', 'APPL Type', 'Application'];
+    if (waveNumber === 3) headers.push('In Conditions Count');
+    if (waveNumber === 4) headers.push('Out Conditions Count');
+    return headers;
+}
+
+/**
+ * Build CSV row for a job
+ */
+function buildJobRow(job, waveNumber) {
+    const row = [
+        job.job_id,
+        escapeCsvField(job.job_name),
+        escapeCsvField(job.folder_name),
+        escapeCsvField(job.appl_type),
+        escapeCsvField(job.application)
+    ];
+    
+    if (waveNumber === 3) row.push(job.in_conditions_count || 0);
+    if (waveNumber === 4) row.push(job.out_conditions_count || 0);
+    
+    return row;
+}
+
+/**
+ * Build CSV headers for folders
+ */
+function buildFolderHeaders(waveNumber) {
+    const headers = ['Folder Name', 'Application', 'Total Jobs', 'Jobs with Internal Deps'];
+    if (waveNumber === 5) headers.push('Jobs with External Deps');
+    return headers;
+}
+
+/**
+ * Build CSV row for a folder
+ */
+function buildFolderRow(folder, waveNumber) {
+    const row = [
+        escapeCsvField(folder.folder_name),
+        escapeCsvField(folder.application),
+        folder.total_jobs,
+        folder.jobs_with_internal_deps
+    ];
+    
+    if (waveNumber === 5) row.push(folder.jobs_with_external_deps || 0);
+    
+    return row;
+}
+
+/**
+ * Generate CSV content for jobs
+ */
+function generateJobsCsv(jobs, waveNumber) {
+    const headers = buildJobHeaders(waveNumber);
+    const rows = jobs.map(job => buildJobRow(job, waveNumber));
+    
+    return [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+    ].join('\n');
+}
+
+/**
+ * Generate CSV content for folders
+ */
+function generateFoldersCsv(folders, waveNumber) {
+    const headers = buildFolderHeaders(waveNumber);
+    const rows = folders.map(folder => buildFolderRow(folder, waveNumber));
+    
+    return [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+    ].join('\n');
+}
+
+/**
+ * Download CSV file
+ */
+function downloadCsv(csvContent, filename) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    URL.revokeObjectURL(url);
+}
+
+/**
  * Export wave data to CSV
  */
 function exportWaveToCSV(waveNumber) {
     console.log(`📥 [WAVE] Exporting Wave ${waveNumber} to CSV...`);
     
+    // Validate data availability
     if (!currentWaveData) {
         alert('No data available to export. Please load the wave data first.');
         return;
@@ -508,87 +642,28 @@ function exportWaveToCSV(waveNumber) {
         return;
     }
     
-    let csvContent = '';
-    let filename = '';
-    
-    // Wave 1, 3, 4 have jobs
-    if (waveData.jobs && waveData.jobs.length > 0) {
-        const waveName = {
-            1: 'Isolated_Jobs',
-            3: 'Leaf_Jobs',
-            4: 'Root_Jobs'
-        }[waveNumber];
-        
-        filename = `wave${waveNumber}_${waveName}_${new Date().toISOString().split('T')[0]}.csv`;
-        
-        // CSV Header
-        const headers = ['Job ID', 'Job Name', 'Folder Name', 'APPL Type', 'Application'];
-        if (waveNumber === 3) headers.push('In Conditions Count');
-        if (waveNumber === 4) headers.push('Out Conditions Count');
-        
-        csvContent = headers.join(',') + '\n';
-        
-        // CSV Rows
-        waveData.jobs.forEach(job => {
-            const row = [
-                job.job_id,
-                `"${(job.job_name || '').replace(/"/g, '""')}"`,
-                `"${(job.folder_name || '').replace(/"/g, '""')}"`,
-                `"${(job.appl_type || '').replace(/"/g, '""')}"`,
-                `"${(job.application || '').replace(/"/g, '""')}"`
-            ];
-            
-            if (waveNumber === 3) row.push(job.in_conditions_count || 0);
-            if (waveNumber === 4) row.push(job.out_conditions_count || 0);
-            
-            csvContent += row.join(',') + '\n';
-        });
+    // Get wave configuration
+    const config = WAVE_CONFIG[waveNumber];
+    if (!config) {
+        alert('Invalid wave number.');
+        return;
     }
-    // Wave 2, 5 have folders
-    else if (waveData.folders && waveData.folders.length > 0) {
-        const waveName = {
-            2: 'Self_Contained_Folders',
-            5: 'Complex_Dependencies'
-        }[waveNumber];
-        
-        filename = `wave${waveNumber}_${waveName}_${new Date().toISOString().split('T')[0]}.csv`;
-        
-        // CSV Header
-        const headers = ['Folder Name', 'Application', 'Total Jobs', 'Jobs with Internal Deps'];
-        if (waveNumber === 5) headers.push('Jobs with External Deps');
-        
-        csvContent = headers.join(',') + '\n';
-        
-        // CSV Rows
-        waveData.folders.forEach(folder => {
-            const row = [
-                `"${(folder.folder_name || '').replace(/"/g, '""')}"`,
-                `"${(folder.application || '').replace(/"/g, '""')}"`,
-                folder.total_jobs,
-                folder.jobs_with_internal_deps
-            ];
-            
-            if (waveNumber === 5) row.push(folder.jobs_with_external_deps || 0);
-            
-            csvContent += row.join(',') + '\n';
-        });
+    
+    // Generate CSV content based on wave type
+    let csvContent;
+    
+    if (config.type === 'jobs' && waveData.jobs?.length > 0) {
+        csvContent = generateJobsCsv(waveData.jobs, waveNumber);
+    } else if (config.type === 'folders' && waveData.folders?.length > 0) {
+        csvContent = generateFoldersCsv(waveData.folders, waveNumber);
     } else {
         alert('No data available to export for this wave.');
         return;
     }
     
-    // Create and download CSV file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Download CSV file
+    const filename = generateCsvFilename(waveNumber, config.name);
+    downloadCsv(csvContent, filename);
     
     console.log(`✅ [WAVE] Exported Wave ${waveNumber} to ${filename}`);
 }
