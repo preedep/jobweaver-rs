@@ -451,6 +451,14 @@ impl SqliteExporter {
             -- Composite indexes for folder filters
             CREATE INDEX IF NOT EXISTS idx_folders_name_datacenter ON folders(folder_name, datacenter);
             CREATE INDEX IF NOT EXISTS idx_folders_name_order_method ON folders(folder_name, folder_order_method);
+            
+            -- Wave Migration Analysis indexes
+            -- Composite index for folder + datacenter lookups in wave analysis
+            CREATE INDEX IF NOT EXISTS idx_jobs_folder_datacenter ON jobs(folder_name, datacenter);
+            
+            -- Additional indexes for wave migration queries
+            CREATE INDEX IF NOT EXISTS idx_jobs_datacenter ON jobs(datacenter);
+            CREATE INDEX IF NOT EXISTS idx_folders_datacenter_order ON folders(datacenter, folder_order_method);
             "#
         ).context("Failed to create database schema")?;
 

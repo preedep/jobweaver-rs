@@ -269,6 +269,13 @@ pub struct RootJobsQuery {
     pub limit: Option<u32>,
 }
 
+/// Query parameters for wave migration analysis
+#[derive(Debug, Deserialize)]
+pub struct WaveMigrationQuery {
+    pub datacenter: Option<String>,
+    pub folder_order_method: Option<String>,
+}
+
 /// Get top root jobs with highest downstream dependency counts
 pub async fn get_top_root_jobs(
     repository: web::Data<Arc<JobRepository>>,
@@ -459,6 +466,44 @@ pub async fn get_job_graph_end_to_end(
                 data: None,
                 error: Some(e.to_string()),
             })
+        },
+    }
+}
+
+/// Get wave migration analysis
+///
+/// Returns jobs and folders categorized by migration wave based on dependency patterns.
+///
+/// # Arguments
+///
+/// * `repository` - Job repository for database access
+/// * `query` - Query parameters for filtering (datacenter, folder_order_method)
+/// * `_auth` - Bearer token authentication
+///
+/// # Returns
+///
+/// HTTP 200 with wave analysis data on success, HTTP 500 on error
+pub async fn get_wave_migration_analysis(
+    repository: web::Data<Arc<JobRepository>>,
+    query: web::Query<WaveMigrationQuery>,
+    _auth: BearerAuth,
+) -> HttpResponse {
+    info!("🌊 [API] GET /wave-migration/analysis - datacenter: {:?}, folder_order_method: {:?}", 
+          query.datacenter, query.folder_order_method);
+    
+    match repository.get_wave_migration_analysis(
+        query.datacenter.as_deref(),
+        query.folder_order_method.as_deref()
+    ) {
+        Ok(analysis) => {
+            info!("✅ [API] Wave migration analysis completed successfully");
+            HttpResponse::Ok().json(ApiResponse::success(analysis))
+        },
+        Err(e) => {
+            error!("❌ [API] Failed to get wave migration analysis: {}", e);
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                format!("Failed to get wave migration analysis: {}", e)
+            ))
         },
     }
 }

@@ -683,72 +683,49 @@ impl JobRepository {
     pub fn get_top_root_jobs(&self, limit: u32, datacenter_filter: Option<&str>, folder_filter: Option<&str>) -> Result<Vec<RootJobStat>> {
         let conn = self.conn.lock().unwrap();
         
-        let mut where_conditions = Vec::new();
+        let mut where_conditions = vec!["1=1"];
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![];
         
         if let Some(dc) = datacenter_filter {
-            where_conditions.push(format!("j.datacenter = '{}'", dc.replace("'", "''")));
+            where_conditions.push("j.datacenter = ?");
+            params.push(Box::new(dc.to_string()));
         }
         
         if let Some(filter) = folder_filter {
             match filter {
-                "with" => where_conditions.push("EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = j.datacenter AND f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
-                "without" => where_conditions.push("NOT EXISTS (SELECT 1 FROM folders f WHERE f.folder_name = j.folder_name AND f.datacenter = j.datacenter AND f.folder_order_method IS NOT NULL AND f.folder_order_method != '')".to_string()),
+                "with" => where_conditions.push("f.folder_order_method IS NOT NULL AND f.folder_order_method != ''"),
+                "without" => where_conditions.push("(f.folder_order_method IS NULL OR f.folder_order_method = '')"),
                 _ => {}
             }
         }
         
-        let where_clause = if where_conditions.is_empty() {
-            String::new()
-        } else {
-            format!("AND {}", where_conditions.join(" AND "))
-        };
+        let where_clause = where_conditions.join(" AND ");
         
+        // Simplified: Just find jobs with out_conditions but no in_conditions
+        // and count their out_conditions as a proxy for downstream dependencies
         let query = format!(r#"
-            WITH internal_deps AS (
-                SELECT DISTINCT
-                    j1.id as dependent_job_id,
-                    j2.id as source_job_id,
-                    j1.folder_name,
-                    j1.datacenter
-                FROM jobs j1
-                INNER JOIN in_conditions ic ON j1.id = ic.job_id
-                INNER JOIN out_conditions oc ON ic.condition_name = oc.condition_name 
-                    AND (ic.odate = oc.odate OR (ic.odate IS NULL AND oc.odate IS NULL))
-                INNER JOIN jobs j2 ON oc.job_id = j2.id
-                WHERE j1.folder_name = j2.folder_name 
-                  AND j1.datacenter = j2.datacenter
-                  AND j1.id != j2.id
-            ),
-            root_jobs AS (
-                SELECT DISTINCT
-                    j.id,
-                    j.job_name,
-                    j.folder_name,
-                    j.datacenter
-                FROM jobs j
-                WHERE EXISTS (
-                    SELECT 1 FROM internal_deps WHERE source_job_id = j.id
-                )
-                AND NOT EXISTS (
-                    SELECT 1 FROM internal_deps WHERE dependent_job_id = j.id
-                )
-                {}
-            )
             SELECT 
-                r.id,
-                r.job_name,
-                r.folder_name,
-                r.datacenter,
-                COUNT(DISTINCT d.dependent_job_id) as downstream_count
-            FROM root_jobs r
-            LEFT JOIN internal_deps d ON r.id = d.source_job_id
-            GROUP BY r.id, r.job_name, r.folder_name, r.datacenter
+                j.id,
+                j.job_name,
+                j.folder_name,
+                j.datacenter,
+                COUNT(DISTINCT oc.id) as downstream_count
+            FROM jobs j
+            JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
+            LEFT JOIN out_conditions oc ON j.id = oc.job_id
+            WHERE {}
+              AND j.id NOT IN (SELECT DISTINCT job_id FROM in_conditions)
+              AND j.id IN (SELECT DISTINCT job_id FROM out_conditions)
+            GROUP BY j.id, j.job_name, j.folder_name, j.datacenter
             ORDER BY downstream_count DESC
             LIMIT ?
         "#, where_clause);
         
+        params.push(Box::new(limit));
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        
         let mut stmt = conn.prepare(&query)?;
-        let root_jobs = stmt.query_map(params![limit], |row| {
+        let root_jobs = stmt.query_map(param_refs.as_slice(), |row| {
             Ok(RootJobStat {
                 id: row.get(0)?,
                 job_name: row.get(1)?,
@@ -1730,5 +1707,305 @@ impl JobRepository {
         )?;
         
         Ok(count)
+    }
+
+    /// Get wave migration analysis
+    pub fn get_wave_migration_analysis(
+        &self,
+        datacenter: Option<&str>,
+        folder_order_method: Option<&str>,
+    ) -> Result<super::models::WaveMigrationAnalysis> {
+        tracing::info!("🌊 [WAVE] Analyzing migration waves - datacenter: {:?}, folder_order_method: {:?}", 
+                      datacenter, folder_order_method);
+        
+        let conn = self.conn.lock().unwrap();
+        
+        // Build WHERE clause for filters
+        let mut where_clauses = vec!["1=1"];
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+        
+        if let Some(dc) = datacenter {
+            where_clauses.push("j.datacenter = ?");
+            params.push(Box::new(dc.to_string()));
+        }
+        
+        if let Some(fom) = folder_order_method {
+            match fom {
+                "with" => where_clauses.push("f.folder_order_method IS NOT NULL AND f.folder_order_method != ''"),
+                "without" => where_clauses.push("(f.folder_order_method IS NULL OR f.folder_order_method = '')"),
+                _ => {
+                    where_clauses.push("f.folder_order_method = ?");
+                    params.push(Box::new(fom.to_string()));
+                }
+            }
+        }
+        
+        let where_clause = where_clauses.join(" AND ");
+        
+        // Wave 1: Isolated Jobs (no in_conditions and no out_conditions)
+        let wave1 = self.get_wave1_data(&conn, &where_clause, &params)?;
+        
+        // Wave 2: Self-Contained Folders (all dependencies internal)
+        let wave2 = self.get_wave2_data(&conn, &where_clause, &params)?;
+        
+        // Wave 3: Leaf Jobs (have in_conditions but no out_conditions)
+        let wave3 = self.get_wave3_data(&conn, &where_clause, &params)?;
+        
+        // Wave 4: Root Jobs (no in_conditions but have out_conditions)
+        let wave4 = self.get_wave4_data(&conn, &where_clause, &params)?;
+        
+        // Wave 5: Complex Dependencies (have external dependencies)
+        let wave5 = self.get_wave5_data(&conn, &where_clause, &params)?;
+        
+        Ok(super::models::WaveMigrationAnalysis {
+            wave1,
+            wave2,
+            wave3,
+            wave4,
+            wave5,
+        })
+    }
+
+    fn get_wave1_data(
+        &self,
+        conn: &rusqlite::Connection,
+        where_clause: &str,
+        params: &[Box<dyn rusqlite::ToSql>],
+    ) -> Result<super::models::WaveData> {
+        let query = format!(
+            "SELECT j.id, j.job_name, j.folder_name, j.appl_type, j.application
+             FROM jobs j
+             JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
+             WHERE {}
+               AND j.id NOT IN (SELECT DISTINCT job_id FROM in_conditions)
+               AND j.id NOT IN (SELECT DISTINCT job_id FROM out_conditions)
+             ORDER BY j.folder_name, j.job_name
+             LIMIT 50",
+            where_clause
+        );
+        
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn.prepare(&query)?;
+        let jobs: Vec<super::models::WaveJob> = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok(super::models::WaveJob {
+                    job_id: row.get(0)?,
+                    job_name: row.get(1)?,
+                    folder_name: row.get(2)?,
+                    appl_type: row.get(3)?,
+                    application: row.get(4)?,
+                    in_conditions_count: None,
+                    out_conditions_count: None,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        let total_jobs = jobs.len() as i64;
+        let total_folders = jobs.iter().map(|j| &j.folder_name).collect::<std::collections::HashSet<_>>().len() as i64;
+        
+        Ok(super::models::WaveData {
+            total_jobs,
+            total_folders,
+            jobs: Some(jobs),
+            folders: None,
+        })
+    }
+
+    fn get_wave2_data(
+        &self,
+        conn: &rusqlite::Connection,
+        where_clause: &str,
+        params: &[Box<dyn rusqlite::ToSql>],
+    ) -> Result<super::models::WaveData> {
+        // Simplified: Just count folders with jobs that have dependencies
+        let query = format!(
+            "SELECT 
+                j.folder_name,
+                f.application,
+                COUNT(DISTINCT j.id) as total_jobs,
+                COUNT(DISTINCT CASE WHEN ic.job_id IS NOT NULL THEN j.id END) as jobs_with_deps
+            FROM jobs j
+            JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
+            LEFT JOIN in_conditions ic ON j.id = ic.job_id
+            WHERE {}
+            GROUP BY j.folder_name, f.application
+            HAVING jobs_with_deps > 0
+            ORDER BY total_jobs DESC
+            LIMIT 50",
+            where_clause
+        );
+        
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        
+        let mut stmt = conn.prepare(&query)?;
+        let folders: Vec<super::models::WaveFolder> = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok(super::models::WaveFolder {
+                    folder_name: row.get(0)?,
+                    application: row.get(1)?,
+                    total_jobs: row.get(2)?,
+                    jobs_with_internal_deps: row.get(3)?,
+                    jobs_with_external_deps: None,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        let total_folders = folders.len() as i64;
+        let total_jobs: i64 = folders.iter().map(|f| f.total_jobs).sum();
+        
+        Ok(super::models::WaveData {
+            total_jobs,
+            total_folders,
+            jobs: None,
+            folders: Some(folders),
+        })
+    }
+
+    fn get_wave3_data(
+        &self,
+        conn: &rusqlite::Connection,
+        where_clause: &str,
+        params: &[Box<dyn rusqlite::ToSql>],
+    ) -> Result<super::models::WaveData> {
+        let query = format!(
+            "SELECT j.id, j.job_name, j.folder_name, j.appl_type, j.application,
+                    (SELECT COUNT(*) FROM in_conditions WHERE job_id = j.id) as in_count
+             FROM jobs j
+             JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
+             WHERE {}
+               AND j.id IN (SELECT DISTINCT job_id FROM in_conditions)
+               AND j.id NOT IN (SELECT DISTINCT job_id FROM out_conditions)
+             ORDER BY in_count DESC, j.job_name
+             LIMIT 50",
+            where_clause
+        );
+        
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn.prepare(&query)?;
+        let jobs: Vec<super::models::WaveJob> = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok(super::models::WaveJob {
+                    job_id: row.get(0)?,
+                    job_name: row.get(1)?,
+                    folder_name: row.get(2)?,
+                    appl_type: row.get(3)?,
+                    application: row.get(4)?,
+                    in_conditions_count: Some(row.get(5)?),
+                    out_conditions_count: None,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        let total_jobs = jobs.len() as i64;
+        let total_folders = jobs.iter().map(|j| &j.folder_name).collect::<std::collections::HashSet<_>>().len() as i64;
+        
+        Ok(super::models::WaveData {
+            total_jobs,
+            total_folders,
+            jobs: Some(jobs),
+            folders: None,
+        })
+    }
+
+    fn get_wave4_data(
+        &self,
+        conn: &rusqlite::Connection,
+        where_clause: &str,
+        params: &[Box<dyn rusqlite::ToSql>],
+    ) -> Result<super::models::WaveData> {
+        let query = format!(
+            "SELECT j.id, j.job_name, j.folder_name, j.appl_type, j.application,
+                    (SELECT COUNT(*) FROM out_conditions WHERE job_id = j.id) as out_count
+             FROM jobs j
+             JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
+             WHERE {}
+               AND j.id NOT IN (SELECT DISTINCT job_id FROM in_conditions)
+               AND j.id IN (SELECT DISTINCT job_id FROM out_conditions)
+             ORDER BY out_count DESC, j.job_name
+             LIMIT 50",
+            where_clause
+        );
+        
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn.prepare(&query)?;
+        let jobs: Vec<super::models::WaveJob> = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok(super::models::WaveJob {
+                    job_id: row.get(0)?,
+                    job_name: row.get(1)?,
+                    folder_name: row.get(2)?,
+                    appl_type: row.get(3)?,
+                    application: row.get(4)?,
+                    in_conditions_count: None,
+                    out_conditions_count: Some(row.get(5)?),
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        let total_jobs = jobs.len() as i64;
+        let total_folders = jobs.iter().map(|j| &j.folder_name).collect::<std::collections::HashSet<_>>().len() as i64;
+        
+        Ok(super::models::WaveData {
+            total_jobs,
+            total_folders,
+            jobs: Some(jobs),
+            folders: None,
+        })
+    }
+
+    fn get_wave5_data(
+        &self,
+        conn: &rusqlite::Connection,
+        where_clause: &str,
+        params: &[Box<dyn rusqlite::ToSql>],
+    ) -> Result<super::models::WaveData> {
+        // Simplified: Just count folders with jobs that have both in and out conditions
+        let query = format!(
+            "SELECT 
+                j.folder_name,
+                f.application,
+                COUNT(DISTINCT j.id) as total_jobs,
+                COUNT(DISTINCT CASE WHEN ic.job_id IS NOT NULL AND oc.job_id IS NOT NULL THEN j.id END) as jobs_with_deps
+            FROM jobs j
+            JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
+            LEFT JOIN in_conditions ic ON j.id = ic.job_id
+            LEFT JOIN out_conditions oc ON j.id = oc.job_id
+            WHERE {}
+            GROUP BY j.folder_name, f.application
+            HAVING jobs_with_deps > 0
+            ORDER BY jobs_with_deps DESC, total_jobs DESC
+            LIMIT 50",
+            where_clause
+        );
+        
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        
+        let mut stmt = conn.prepare(&query)?;
+        let folders: Vec<super::models::WaveFolder> = stmt
+            .query_map(param_refs.as_slice(), |row| {
+                Ok(super::models::WaveFolder {
+                    folder_name: row.get(0)?,
+                    application: row.get(1)?,
+                    total_jobs: row.get(2)?,
+                    jobs_with_internal_deps: 0,
+                    jobs_with_external_deps: Some(row.get(3)?),
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        
+        let total_folders = folders.len() as i64;
+        let total_jobs: i64 = folders.iter().map(|f| f.total_jobs).sum();
+        
+        Ok(super::models::WaveData {
+            total_jobs,
+            total_folders,
+            jobs: None,
+            folders: Some(folders),
+        })
     }
 }

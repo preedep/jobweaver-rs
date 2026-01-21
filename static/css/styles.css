@@ -2736,3 +2736,86 @@ body {
         width: 95vw;
     }
 }
+
+/* Wave Migration Styles */
+.wave-tab-btn {
+    padding: 12px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748b;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.wave-tab-btn:hover {
+    color: #334155;
+    background: #f8fafc;
+}
+
+.wave-tab-btn.active {
+    color: #0f172a;
+    border-bottom-color: #2563eb;
+}
+
+.wave-content {
+    display: none;
+}
+
+.wave-content.active {
+    display: block;
+}
+
+.simple-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.simple-table th {
+    background: #f8fafc;
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.simple-table td {
+    padding: 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.simple-table tr:hover {
+    background: #f8fafc;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #94a3b8;
+}
+
+.empty-state i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-state p {
+    font-size: 16px;
+    margin: 0;
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+    color: #64748b;
+}
+
+.loading-spinner i {
+    font-size: 24px;
+    margin-right: 8px;
+}

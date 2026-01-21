@@ -556,6 +556,10 @@ function switchContentPage(page) {
     } else if (page === 'jobs') {
         loadFilterOptions();
         performSearch();
+    } else if (page === 'wave-migration') {
+        if (typeof initWaveMigration === 'function') {
+            initWaveMigration();
+        }
     }
 }
 
