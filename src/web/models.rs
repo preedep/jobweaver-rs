@@ -445,3 +445,47 @@ impl<T> ApiResponse<T> {
         }
     }
 }
+
+// Wave Migration Analysis Models
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WaveMigrationAnalysis {
+    pub wave1: WaveData,
+    pub wave2: WaveData,
+    pub wave3: WaveData,
+    pub wave4: WaveData,
+    pub wave5: WaveData,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WaveData {
+    pub total_jobs: i64,
+    pub total_folders: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jobs: Option<Vec<WaveJob>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folders: Option<Vec<WaveFolder>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WaveJob {
+    pub job_id: i64,
+    pub job_name: String,
+    pub folder_name: String,
+    pub appl_type: Option<String>,
+    pub application: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in_conditions_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_conditions_count: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WaveFolder {
+    pub folder_name: String,
+    pub application: Option<String>,
+    pub total_jobs: i64,
+    pub jobs_with_internal_deps: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jobs_with_external_deps: Option<i64>,
+}

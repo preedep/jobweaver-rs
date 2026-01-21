@@ -22,17 +22,34 @@ async function loadTopRootJobs(datacenter = null, folderFilter = null, limit = 1
         params.append('limit', limit);
         
         const url = `${API_BASE}/dashboard/root-jobs?${params.toString()}`;
-        console.log('Fetching root jobs from:', url);
-            
+        console.log('🚀 [ROOT-JOBS] Fetching from:', url);
+        
+        const startTime = performance.now();
+        
+        // Add timeout of 30 seconds
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
         const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
-            }
+            },
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
+        
+        const loadTime = (performance.now() - startTime).toFixed(2);
+        console.log(`⏱️  [ROOT-JOBS] Response received in ${loadTime}ms`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         
         const result = await response.json();
         
         if (result.success && result.data) {
+            console.log(`✅ [ROOT-JOBS] Loaded ${result.data.length} root jobs`);
             // Small delay for smooth transition
             setTimeout(() => {
                 renderRootJobsList(result.data, containerId);
@@ -41,11 +58,17 @@ async function loadTopRootJobs(datacenter = null, folderFilter = null, limit = 1
                 if (tableWrapper) smoothAppear(tableWrapper);
             }, 150);
         } else {
+            console.error('❌ [ROOT-JOBS] Failed:', result.error || result.message);
             container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Failed to load root jobs</div></div>';
         }
     } catch (error) {
-        console.error('Error loading root jobs:', error);
-        container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Error loading root jobs</div><div class="placeholder-subtext">Please try again</div></div>';
+        if (error.name === 'AbortError') {
+            console.error('❌ [ROOT-JOBS] Request timeout (>30s)');
+            container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Request timeout</div><div class="placeholder-subtext">The query is taking too long. Try filtering by datacenter.</div></div>';
+        } else {
+            console.error('❌ [ROOT-JOBS] Error:', error);
+            container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Error loading root jobs</div><div class="placeholder-subtext">Please try again</div></div>';
+        }
     }
 }
 
