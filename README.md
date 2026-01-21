@@ -158,9 +158,11 @@ jobweaver serve -d controlm.db
 - 🔐 Authentication (Local & Entra ID)
 - 🔍 Advanced search with multiple filters
 - 📊 Interactive dashboard with statistics
+- 🌊 **Wave Migration Analysis** - Dependency-based migration planning with 5 waves
 - 📋 Enterprise-grade sortable table
 - 🎯 Drill-down job details
 - 📱 Responsive design
+- 📥 CSV export for all analysis results
 
 **Example:**
 ```bash
@@ -172,6 +174,57 @@ jobweaver serve -d controlm.db -p 8080
 ```
 
 See [Web Server Documentation](docs/WEB_SERVER.md) for complete guide and API reference.
+
+#### Wave Migration Analysis
+
+The web interface includes a comprehensive **Wave Migration Analysis** page that categorizes jobs into 5 migration waves based on dependency patterns. This helps prioritize and plan your Control-M to Airflow migration strategy.
+
+**Migration Waves:**
+
+1. **Wave 1: Isolated Jobs** 🌟
+   - Jobs with no dependencies (no in_conditions and no out_conditions)
+   - **Risk:** Lowest
+   - **Effort:** Minimal
+   - **Strategy:** Quick wins - migrate first to build confidence
+
+2. **Wave 2: Self-Contained Folders** 📦
+   - Folders where all job dependencies are internal (within same folder)
+   - **Risk:** Low
+   - **Effort:** Moderate
+   - **Strategy:** Migrate entire folders as units
+
+3. **Wave 3: Leaf Jobs** 🍃
+   - Jobs with in_conditions but no out_conditions (end points of workflows)
+   - **Risk:** Medium
+   - **Effort:** Moderate
+   - **Strategy:** Migrate after their dependencies
+
+4. **Wave 4: Root Jobs** 🌳
+   - Jobs with no in_conditions but have out_conditions (start points of workflows)
+   - **Risk:** Higher
+   - **Effort:** Significant
+   - **Strategy:** Migrate early to enable downstream jobs
+
+5. **Wave 5: Complex Dependencies** 🔗
+   - Jobs/Folders with cross-folder dependencies
+   - **Risk:** Highest
+   - **Effort:** Maximum
+   - **Strategy:** Requires coordination and careful planning
+
+**Features:**
+- Filter by datacenter and folder order method
+- View summary statistics for each wave
+- Detailed job/folder listings with dependency counts
+- Export wave data to CSV for offline analysis
+- Interactive tabs for easy navigation between waves
+
+**Example Use Case:**
+```
+1. Start with Wave 1 (Isolated Jobs) - 25 jobs with zero risk
+2. Move to Wave 2 (Self-Contained Folders) - 50 folders can be migrated independently
+3. Tackle Wave 3 & 4 (Leaf/Root Jobs) - 100 jobs with clear dependency patterns
+4. Finally address Wave 5 (Complex) - 30 folders requiring coordination
+```
 
 ### Output Formats
 
@@ -444,6 +497,94 @@ sqlite3 controlm.db "SELECT job_name, folder_name FROM jobs WHERE critical = 1;"
 ดูรายละเอียด [เอกสาร SQLite Schema](docs/SQLITE_SCHEMA.md) สำหรับโครงสร้างตารางและตัวอย่าง query
 
 ดูรายละเอียด [เอกสารประสิทธิภาพ](docs/PERFORMANCE.md) สำหรับรายละเอียดการปรับแต่งและ benchmarks
+
+#### คำสั่ง Web Server
+
+เริ่ม web server แบบ interactive เพื่อสำรวจ jobs ผ่าน web interface ที่ทันสมัย
+
+```bash
+jobweaver serve -d controlm.db
+```
+
+**ตัวเลือก:**
+```
+  -d, --database <FILE>   ไฟล์ SQLite database [default: controlm.db]
+  -p, --port <PORT>       Port ที่ต้องการใช้ [default: 8080]
+      --host <HOST>       Host ที่จะ bind [default: 127.0.0.1]
+  -v, --verbose           แสดง log แบบละเอียด
+```
+
+**ฟีเจอร์:**
+- 🔐 Authentication (Local & Entra ID)
+- 🔍 ค้นหาขั้นสูงด้วย filters หลายแบบ
+- 📊 Dashboard แบบ interactive พร้อมสถิติ
+- 🌊 **Wave Migration Analysis** - วางแผนการย้ายตาม dependencies แบบ 5 waves
+- 📋 ตารางแบบ enterprise ที่เรียงลำดับได้
+- 🎯 ดูรายละเอียด job แบบ drill-down
+- 📱 Responsive design
+- 📥 Export ผลการวิเคราะห์ทั้งหมดเป็น CSV
+
+**ตัวอย่าง:**
+```bash
+# เริ่ม web server
+jobweaver serve -d controlm.db -p 8080
+
+# เปิด browser ไปที่ http://localhost:8080
+# Login เริ่มต้น: admin / admin
+```
+
+ดูรายละเอียด [เอกสาร Web Server](docs/WEB_SERVER.md) สำหรับคู่มือและ API reference
+
+#### Wave Migration Analysis
+
+Web interface มีหน้า **Wave Migration Analysis** ที่ครอบคลุม ซึ่งจัดกลุ่ม jobs เป็น 5 migration waves ตามรูปแบบ dependencies ช่วยจัดลำดับความสำคัญและวางแผนกลยุทธ์การย้ายจาก Control-M ไป Airflow
+
+**Migration Waves:**
+
+1. **Wave 1: Isolated Jobs** 🌟
+   - Jobs ที่ไม่มี dependencies (ไม่มี in_conditions และ out_conditions)
+   - **ความเสี่ยง:** ต่ำที่สุด
+   - **ความพยายาม:** น้อยที่สุด
+   - **กลยุทธ์:** Quick wins - ย้ายก่อนเพื่อสร้างความมั่นใจ
+
+2. **Wave 2: Self-Contained Folders** 📦
+   - Folders ที่ job dependencies ทั้งหมดอยู่ภายใน (ใน folder เดียวกัน)
+   - **ความเสี่ยง:** ต่ำ
+   - **ความพยายาม:** ปานกลาง
+   - **กลยุทธ์:** ย้ายทั้ง folder เป็นหน่วย
+
+3. **Wave 3: Leaf Jobs** 🍃
+   - Jobs ที่มี in_conditions แต่ไม่มี out_conditions (จุดสิ้นสุดของ workflows)
+   - **ความเสี่ยง:** ปานกลาง
+   - **ความพยายาม:** ปานกลาง
+   - **กลยุทธ์:** ย้ายหลังจาก dependencies ของมัน
+
+4. **Wave 4: Root Jobs** 🌳
+   - Jobs ที่ไม่มี in_conditions แต่มี out_conditions (จุดเริ่มต้นของ workflows)
+   - **ความเสี่ยง:** สูงขึ้น
+   - **ความพยายาม:** มาก
+   - **กลยุทธ์:** ย้ายเร็วเพื่อเปิดใช้งาน downstream jobs
+
+5. **Wave 5: Complex Dependencies** 🔗
+   - Jobs/Folders ที่มี cross-folder dependencies
+   - **ความเสี่ยง:** สูงที่สุด
+   - **ความพยายาม:** มากที่สุด
+   - **กลยุทธ์:** ต้องประสานงานและวางแผนอย่างรอบคอบ
+
+**ฟีเจอร์:**
+- กรองตาม datacenter และ folder order method
+- ดูสถิติสรุปของแต่ละ wave
+- รายการ job/folder แบบละเอียดพร้อมจำนวน dependencies
+- Export ข้อมูล wave เป็น CSV สำหรับวิเคราะห์ offline
+- Tabs แบบ interactive สำหรับสลับระหว่าง waves ได้ง่าย
+
+**ตัวอย่างการใช้งาน:**
+```
+1. เริ่มจาก Wave 1 (Isolated Jobs) - 25 jobs ไม่มีความเสี่ยง
+2. ไปที่ Wave 2 (Self-Contained Folders) - 50 folders ย้ายได้อิสระ
+3. จัดการ Wave 3 & 4 (Leaf/Root Jobs) - 100 jobs มีรูปแบบ dependency ชัดเจน
+4. สุดท้ายจัดการ Wave 5 (Complex) - 30 folders ต้องประสานงาน
+```
 
 ### รูปแบบรายงาน
 
