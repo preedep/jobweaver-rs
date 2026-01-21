@@ -7,6 +7,7 @@ let currentGraphData = null;
 let currentFilter = 'all';
 let currentDepth = 2;
 let currentViewMode = 'hierarchical';
+let currentModalGraphMode = 'direct';
 let highlightedNodes = [];
 
 /**
@@ -58,15 +59,25 @@ function filterGraphByDepth(graphData, maxDepth) {
 /**
  * Load and render dependency graph for a job
  */
-async function loadDependencyGraph(jobId) {
+async function loadDependencyGraph(jobId, mode = 'direct', depth = null) {
     const container = document.getElementById('dependency-graph-container');
     if (!container) return;
+    
+    currentModalGraphMode = mode;
     
     // Show professional loading state
     showSpinner('dependency-graph-container', 'Loading dependency graph...');
     
     try {
-        const response = await fetch(`${API_BASE}/jobs/${jobId}/dependencies`, {
+        let url = `${API_BASE}/jobs/${jobId}/dependencies`;
+        if (mode === 'e2e') {
+            // Use depth parameter or default to 3 for better performance
+            const graphDepth = depth || 3;
+            url = `${API_BASE}/jobs/${jobId}/graph/end-to-end?depth=${graphDepth}`;
+            console.log(`Loading end-to-end graph with depth=${graphDepth}`);
+        }
+        
+        const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -75,17 +86,24 @@ async function loadDependencyGraph(jobId) {
         const result = await response.json();
         
         if (result.success) {
-            currentGraphData = result.data;
-            
-            // Small delay for smooth transition
-            setTimeout(() => {
-                renderDependencyGraph(currentGraphData, currentFilter, currentDepth, currentViewMode);
-                updateDependencyStats(currentGraphData.stats);
-                initializeGraphControls();
+            if (mode === 'e2e') {
+                console.log('End-to-End Graph Data:', result.data);
+                console.log('Nodes count:', result.data.nodes?.length || 0);
+                console.log('Edges count:', result.data.edges?.length || 0);
+                renderEndToEndGraph(result.data);
+            } else {
+                currentGraphData = result.data;
                 
-                // Add smooth appear animation
-                smoothAppear(container);
-            }, 150);
+                // Small delay for smooth transition
+                setTimeout(() => {
+                    renderDependencyGraph(currentGraphData, currentFilter, currentDepth, currentViewMode);
+                    updateDependencyStats(currentGraphData.stats);
+                    initializeGraphControls();
+                    
+                    // Add smooth appear animation
+                    smoothAppear(container);
+                }, 150);
+            }
         } else {
             container.innerHTML = '<div class="content-placeholder"><div class="placeholder-text">Failed to load dependency graph</div></div>';
         }
@@ -292,6 +310,231 @@ function fitNetworkToContainer(network) {
 }
 
 /**
+ * Render end-to-end dependency graph with hierarchical layout
+ */
+function renderEndToEndGraph(graphData) {
+    const container = document.getElementById('dependency-graph-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // Check if graph has data
+    if (!graphData.nodes || graphData.nodes.length === 0) {
+        container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;"><div style="text-align: center;"><i class="fas fa-info-circle" style="font-size: 48px; margin-bottom: 16px;"></i><p>No end-to-end dependencies found</p><p style="font-size: 12px; color: #aaa;">This job may be a root job with no upstream dependencies</p></div></div>';
+        document.getElementById('dep-total').textContent = '0';
+        document.getElementById('dep-internal').textContent = '0';
+        document.getElementById('dep-external').textContent = '0';
+        return;
+    }
+    
+    // Convert graph data to vis.js format with original colors (blue=root, green=internal, orange=external)
+    const visNodes = graphData.nodes.map(node => {
+        const isRoot = node.is_current || false;
+        const isInternal = node.is_internal || false;
+        
+        // Use original color scheme: blue for root, green for internal, orange for external
+        let backgroundColor, borderColor;
+        if (isRoot) {
+            backgroundColor = '#2196F3';
+            borderColor = '#1976D2';
+        } else if (isInternal) {
+            backgroundColor = '#4CAF50';
+            borderColor = '#388E3C';
+        } else {
+            backgroundColor = '#FF9800';
+            borderColor = '#F57C00';
+        }
+        
+        return {
+            id: node.id,
+            label: truncateText(node.label, 25),
+            title: `${node.label}\nFolder: ${node.folder}${node.application ? '\nApplication: ' + node.application : ''}`,
+            color: {
+                background: backgroundColor,
+                border: borderColor,
+                highlight: {
+                    background: isRoot ? '#1976D2' : (isInternal ? '#66BB6A' : '#FFB74D'),
+                    border: isRoot ? '#0D47A1' : (isInternal ? '#2E7D32' : '#E65100')
+                }
+            },
+            font: {
+                color: '#ffffff',
+                size: isRoot ? 14 : 12,
+                face: 'Arial',
+                bold: isRoot
+            },
+            shape: 'box',
+            margin: 10,
+            borderWidth: isRoot ? 3 : 2,
+            shadow: true
+        };
+    });
+    
+    const visEdges = graphData.edges.map(edge => {
+        return {
+            from: edge.from,
+            to: edge.to,
+            arrows: 'to',
+            color: {
+                color: '#94a3b8',
+                highlight: '#64748b'
+            },
+            width: 2,
+            smooth: {
+                type: 'cubicBezier',
+                forceDirection: 'horizontal',
+                roundness: 0.4
+            }
+        };
+    });
+    
+    const data = {
+        nodes: new vis.DataSet(visNodes),
+        edges: new vis.DataSet(visEdges)
+    };
+    
+    // Optimize options for large graphs
+    const isLargeGraph = graphData.nodes.length > 100;
+    
+    const options = {
+        layout: {
+            hierarchical: {
+                enabled: true,
+                direction: 'LR',
+                sortMethod: 'directed',
+                levelSeparation: isLargeGraph ? 150 : 200,
+                nodeSpacing: isLargeGraph ? 100 : 150,
+                treeSpacing: isLargeGraph ? 150 : 200,
+                blockShifting: true,
+                edgeMinimization: true,
+                parentCentralization: true
+            }
+        },
+        physics: {
+            enabled: false
+        },
+        interaction: {
+            hover: !isLargeGraph, // Disable hover for large graphs to improve performance
+            tooltipDelay: 100,
+            zoomView: true,
+            dragView: true,
+            navigationButtons: false,
+            keyboard: false
+        },
+        nodes: {
+            shape: 'box',
+            margin: isLargeGraph ? 5 : 10,
+            widthConstraint: {
+                maximum: isLargeGraph ? 150 : 200
+            },
+            font: {
+                size: isLargeGraph ? 10 : 12
+            }
+        },
+        edges: {
+            smooth: {
+                type: isLargeGraph ? 'straightCross' : 'cubicBezier',
+                forceDirection: 'horizontal',
+                roundness: 0.2
+            },
+            arrows: {
+                to: {
+                    enabled: true,
+                    scaleFactor: isLargeGraph ? 0.5 : 1
+                }
+            }
+        }
+    };
+    
+    // Show warning for very large graphs
+    if (graphData.nodes.length > 500) {
+        console.warn(`⚠️ Large graph detected (${graphData.nodes.length} nodes). Rendering may take a while...`);
+    }
+    
+    if (window.dependencyNetwork) {
+        window.dependencyNetwork.destroy();
+    }
+    
+    window.dependencyNetwork = new vis.Network(container, data, options);
+    
+    window.dependencyNetwork.on('click', function(params) {
+        if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            const node = graphData.nodes.find(n => n.id === nodeId);
+            if (node) {
+                console.log('Clicked node:', node);
+            }
+        }
+    });
+    
+    // Wait for network to stabilize before fitting (especially for large graphs)
+    window.dependencyNetwork.once('stabilizationIterationsDone', function() {
+        if (window.dependencyNetwork && window.dependencyNetwork.fit) {
+            window.dependencyNetwork.fit({
+                animation: {
+                    duration: 500,
+                    easingFunction: 'easeInOutQuad'
+                }
+            });
+        }
+    });
+    
+    // Fallback: fit after timeout if stabilization doesn't complete
+    setTimeout(() => {
+        if (window.dependencyNetwork && window.dependencyNetwork.fit) {
+            try {
+                window.dependencyNetwork.fit({
+                    animation: {
+                        duration: 500,
+                        easingFunction: 'easeInOutQuad'
+                    }
+                });
+            } catch (e) {
+                console.warn('Failed to fit network:', e);
+            }
+        }
+    }, 1000);
+    
+    // Update stats
+    const rootNode = graphData.nodes.find(n => n.is_current);
+    const internalCount = graphData.nodes.filter(n => n.is_internal && !n.is_current).length;
+    const externalCount = graphData.nodes.filter(n => !n.is_internal && !n.is_current).length;
+    
+    document.getElementById('dep-total').textContent = graphData.nodes.length.toLocaleString();
+    document.getElementById('dep-internal').textContent = internalCount.toLocaleString();
+    document.getElementById('dep-external').textContent = externalCount.toLocaleString();
+}
+
+/**
+ * Switch graph mode in modal (Direct or End-to-End)
+ */
+function switchModalGraphMode(mode) {
+    const directBtn = document.getElementById('btn-modal-direct-graph');
+    const e2eBtn = document.getElementById('btn-modal-e2e-graph');
+    const scopeFilterContainer = document.getElementById('modal-scope-filter-container');
+    const depthControl = document.getElementById('graph-depth-control');
+    
+    if (mode === 'direct') {
+        directBtn.classList.add('active');
+        e2eBtn.classList.remove('active');
+        if (scopeFilterContainer) scopeFilterContainer.style.display = 'block';
+    } else {
+        directBtn.classList.remove('active');
+        e2eBtn.classList.add('active');
+        if (scopeFilterContainer) scopeFilterContainer.style.display = 'none';
+    }
+    
+    if (window.currentJobIdForGraph) {
+        // Get current depth setting
+        const depth = depthControl ? parseInt(depthControl.value) : 3;
+        loadDependencyGraph(window.currentJobIdForGraph, mode, depth);
+    }
+}
+
+// Make function global
+window.switchModalGraphMode = switchModalGraphMode;
+
+/**
  * Render dependency graph using vis.js hierarchical directed graph
  */
 function renderDependencyGraph(graphData, filter = 'all', maxDepth = 2, viewMode = 'hierarchical') {
@@ -370,7 +613,12 @@ function initializeGraphControls() {
     if (depthControl) {
         depthControl.addEventListener('change', (e) => {
             currentDepth = parseInt(e.target.value);
-            if (currentGraphData) {
+            
+            // If in end-to-end mode, reload graph with new depth
+            if (currentModalGraphMode === 'e2e' && window.currentJobIdForGraph) {
+                loadDependencyGraph(window.currentJobIdForGraph, 'e2e', currentDepth);
+            } else if (currentGraphData) {
+                // For direct mode, just re-render with current data
                 renderDependencyGraph(currentGraphData, currentFilter, currentDepth, currentViewMode);
             }
         });
