@@ -1587,15 +1587,45 @@ impl JobRepository {
         
         tracing::debug!("[E2E-GRAPH] Downstream level {}: Processing job_id={}", current_level, current_job_id);
         
-        // Find jobs that depend on current job
-        let out_query = "SELECT DISTINCT job_id FROM in_conditions WHERE condition_name = ?";
-        let mut out_stmt = conn.prepare(out_query)?;
-        let dependent_job_ids: Vec<i64> = out_stmt
-            .query_map([current_job_name], |row| row.get(0))?
+        // First, get all out_conditions for current job
+        let out_cond_query = "SELECT DISTINCT condition_name FROM out_conditions WHERE job_id = ?";
+        let mut out_cond_stmt = conn.prepare(out_cond_query)?;
+        let condition_names: Vec<String> = out_cond_stmt
+            .query_map([current_job_id], |row| row.get(0))?
             .filter_map(|r| r.ok())
             .collect();
         
-        tracing::debug!("[E2E-GRAPH] Found {} dependent jobs for '{}'", dependent_job_ids.len(), current_job_name);
+        tracing::debug!("[E2E-GRAPH] Found {} out_conditions for job_id={}", condition_names.len(), current_job_id);
+        
+        // For each condition, find jobs that wait for it
+        let mut dependent_job_ids = Vec::new();
+        for cond_name in condition_names {
+            let dep_query = "SELECT DISTINCT job_id FROM in_conditions WHERE condition_name = ?";
+            let mut dep_stmt = conn.prepare(dep_query)?;
+            let job_ids: Vec<i64> = dep_stmt
+                .query_map([&cond_name], |row| row.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            
+            tracing::debug!("[E2E-GRAPH] Condition '{}' is waited by {} jobs", cond_name, job_ids.len());
+            dependent_job_ids.extend(job_ids);
+        }
+        
+        // Also check for jobs waiting for job_name directly (fallback)
+        let direct_query = "SELECT DISTINCT job_id FROM in_conditions WHERE condition_name = ? OR condition_name LIKE ?";
+        let mut direct_stmt = conn.prepare(direct_query)?;
+        let pattern = format!("{}%", current_job_name);
+        let direct_job_ids: Vec<i64> = direct_stmt
+            .query_map([current_job_name, &pattern], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        dependent_job_ids.extend(direct_job_ids);
+        
+        // Remove duplicates
+        dependent_job_ids.sort();
+        dependent_job_ids.dedup();
+        
+        tracing::debug!("[E2E-GRAPH] Total {} dependent jobs for job_id={}", dependent_job_ids.len(), current_job_id);
         
         for dep_job_id in dependent_job_ids {
             if let Ok(dep_job) = conn.query_row(

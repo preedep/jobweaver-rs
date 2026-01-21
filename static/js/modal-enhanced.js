@@ -239,7 +239,7 @@ function populateDependenciesTab(data) {
     
     // In Conditions
     const inConditions = data.in_conditions || [];
-    document.getElementById('in-cond-count').textContent = inConditions.length;
+    document.getElementById('in-cond-count').textContent = inConditions.length.toLocaleString();
     
     if (inConditions.length > 0) {
         const inCondHtml = `
@@ -269,7 +269,7 @@ function populateDependenciesTab(data) {
     
     // Out Conditions
     const outConditions = data.out_conditions || [];
-    document.getElementById('out-cond-count').textContent = outConditions.length;
+    document.getElementById('out-cond-count').textContent = outConditions.length.toLocaleString();
     
     if (outConditions.length > 0) {
         const outCondHtml = `
@@ -299,7 +299,7 @@ function populateDependenciesTab(data) {
     
     // Control Resources
     const controlResources = data.control_resources || [];
-    document.getElementById('ctrl-res-count').textContent = controlResources.length;
+    document.getElementById('ctrl-res-count').textContent = controlResources.length.toLocaleString();
     
     if (controlResources.length > 0) {
         const ctrlResHtml = `
@@ -329,7 +329,7 @@ function populateDependenciesTab(data) {
     
     // Quantitative Resources
     const quantResources = data.quantitative_resources || [];
-    document.getElementById('quant-res-count').textContent = quantResources.length;
+    document.getElementById('quant-res-count').textContent = quantResources.length.toLocaleString();
     
     if (quantResources.length > 0) {
         const quantResHtml = `
@@ -344,7 +344,7 @@ function populateDependenciesTab(data) {
                     ${quantResources.map(r => `
                         <tr>
                             <td><strong>${escapeHtml(r.resource_name)}</strong></td>
-                            <td>${r.quantity || 0}</td>
+                            <td>${(r.quantity || 0).toLocaleString()}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -360,7 +360,7 @@ function populateDependenciesTab(data) {
 function populateVariablesTab(data) {
     // Variables
     const variables = data.variables || [];
-    document.getElementById('var-count').textContent = variables.length;
+    document.getElementById('var-count').textContent = variables.length.toLocaleString();
     
     if (variables.length > 0) {
         const varHtml = `
@@ -388,7 +388,7 @@ function populateVariablesTab(data) {
     
     // ON Conditions
     const onConditions = data.on_conditions || [];
-    document.getElementById('on-cond-count').textContent = onConditions.length;
+    document.getElementById('on-cond-count').textContent = onConditions.length.toLocaleString();
     
     if (onConditions.length > 0) {
         const onCondHtml = onConditions.map(oc => `

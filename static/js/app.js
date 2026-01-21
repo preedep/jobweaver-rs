@@ -573,6 +573,15 @@ async function loadDashboard(folderFilter = '', datacenterFilter = '') {
     const startTime = performance.now();
     console.log('📊 [DASHBOARD] Loading dashboard statistics...');
     
+    // Show loading state for charts
+    const chartContainers = ['chart-appl-types', 'chart-task-types', 'chart-applications', 'chart-folders'];
+    chartContainers.forEach(id => {
+        const container = document.getElementById(id);
+        if (container) {
+            container.innerHTML = '<div class="skeleton skeleton-chart"></div>';
+        }
+    });
+    
     try {
         const fetchStart = performance.now();
         
@@ -686,7 +695,7 @@ function renderBarChart(containerId, data, labelKey, valueKey) {
                 <div class="chart-bar-container">
                     <div class="chart-bar-fill" style="width: ${percentage}%"></div>
                 </div>
-                <div class="chart-value">${item[valueKey]}</div>
+                <div class="chart-value">${item[valueKey].toLocaleString()}</div>
             </div>
         `;
     }).join('');
@@ -721,7 +730,7 @@ function renderComplexityChart(containerId, data) {
                 <div class="chart-bar-container">
                     <div class="chart-bar-fill" style="width: ${percentage}%; background: ${item.color}"></div>
                 </div>
-                <div class="chart-value">${item.value}</div>
+                <div class="chart-value">${item.value.toLocaleString()}</div>
             </div>
         `;
     }).join('');
