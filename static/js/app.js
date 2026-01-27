@@ -1499,6 +1499,52 @@ function initializeColumnResize() {
 // ============================================================================
 
 /**
+ * Shows loading state for export operation
+ */
+function showExportLoading() {
+    showLoading(true);
+    const loadingText = document.querySelector('#loading-overlay .loading-text');
+    if (loadingText) {
+        loadingText.textContent = 'Exporting to CSV...';
+    }
+}
+
+/**
+ * Hides loading state and resets text
+ */
+function hideExportLoading() {
+    showLoading(false);
+    const loadingText = document.querySelector('#loading-overlay .loading-text');
+    if (loadingText) {
+        loadingText.textContent = 'Searching jobs...';
+    }
+}
+
+/**
+ * Downloads CSV file from blob response
+ * @param {Blob} blob - CSV data blob
+ */
+function downloadCSVFile(blob) {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `jobs_export_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
+/**
+ * Handles export error with user feedback
+ * @param {Error} error - The error that occurred
+ */
+function handleExportError(error) {
+    console.error('❌ [EXPORT] Error:', error);
+    alert('Failed to export CSV');
+}
+
+/**
  * Exports current search results to CSV file
  * Applies the same filters as the current search
  * 
@@ -1507,36 +1553,15 @@ function initializeColumnResize() {
 async function exportToCSV() {
     const startTime = performance.now();
     console.log('📥 [EXPORT] Starting CSV export...');
-    showLoading(true);
-    console.log("[SEARCH] Starting search...");
-    
-    // Update loading text if element exists
-    const loadingText = document.querySelector('#loading-overlay .loading-text');
-    if (loadingText) {
-        loadingText.textContent = 'Exporting to CSV...';
-    }
-    
-    const jobName = document.getElementById('filter-job-name').value;
-    const folder = $('#filter-folder').val();
-    const application = $('#filter-application').val();
-    const applType = $('#filter-appl-type').val();
-    const applVer = $('#filter-appl-ver').val();
-    const taskType = document.getElementById('filter-task-type').value;
-    const critical = document.getElementById('filter-critical').value;
-    
-    const filters = {};
-    if (jobName) filters.job_name = jobName;
-    if (folder) filters.folder_name = folder;
-    if (application) filters.application = application;
-    if (applType) filters.appl_type = applType;
-    if (applVer) filters.appl_ver = applVer;
-    if (taskType) filters.task_type = taskType;
-    if (critical) filters.critical = critical === 'true';
-    
-    console.log('📋 [EXPORT] Filters:', filters);
     
     try {
-        console.log('🌐 [EXPORT] Sending export request...');
+        showExportLoading();
+        
+        const filterValues = collectFilterValues();
+        const filters = buildFiltersObject(filterValues);
+        console.log('📋 [EXPORT] Filters being sent:', filters);
+        
+        console.log('🌐 [EXPORT] Sending export request with filters:', filters);
         const fetchStart = performance.now();
         
         const response = await fetch(`${API_BASE}/jobs/export`, {
@@ -1557,14 +1582,7 @@ async function exportToCSV() {
             console.log(`📊 [EXPORT] CSV size: ${(blob.size / 1024).toFixed(2)} KB`);
             
             console.log('💾 [EXPORT] Triggering download...');
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `jobs_export_${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+            downloadCSVFile(blob);
             
             console.log('✅ [EXPORT] CSV exported successfully');
         } else {
@@ -1572,16 +1590,9 @@ async function exportToCSV() {
             alert('Failed to export CSV');
         }
     } catch (error) {
-        console.error('❌ [EXPORT] Error:', error);
-        alert('Failed to export CSV');
+        handleExportError(error);
     } finally {
-        showLoading(false);
-        
-        // Reset loading text if element exists
-        const loadingText = document.querySelector('#loading-overlay .loading-text');
-        if (loadingText) {
-            loadingText.textContent = 'Searching jobs...';
-        }
+        hideExportLoading();
         
         const endTime = performance.now();
         console.log(`🏁 [EXPORT] Total export time: ${(endTime - startTime).toFixed(2)}ms`);

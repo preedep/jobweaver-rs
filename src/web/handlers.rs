@@ -368,11 +368,12 @@ pub async fn get_filter_options(
 ///
 /// HTTP 200 with CSV file on success, HTTP 500 on error
 pub async fn export_jobs_csv(
-    query: web::Query<JobSearchRequest>,
+    request: web::Json<JobSearchRequest>,
     repository: web::Data<Arc<JobRepository>>,
     _auth: BearerAuth,
 ) -> HttpResponse {
-    match repository.export_search_to_csv(&query.into_inner()) {
+    tracing::info!("📥 [EXPORT_HANDLER] Received export request: {:?}", request);
+    match repository.export_search_to_csv(&request.into_inner()) {
         Ok(csv_data) => HttpResponse::Ok()
             .content_type("text/csv")
             .insert_header(("Content-Disposition", "attachment; filename=\"jobs_export.csv\""))

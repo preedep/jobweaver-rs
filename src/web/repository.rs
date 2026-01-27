@@ -1074,61 +1074,26 @@ impl JobRepository {
     pub fn export_search_to_csv(&self, request: &JobSearchRequest) -> Result<String> {
         let conn = self.conn.lock().unwrap();
         
+        tracing::info!("📥 [CSV_EXPORT] Starting CSV export with request: {:?}", request);
+        
         let (where_clause, params_vec) = self.build_csv_where_clause(request);
+        tracing::info!("🔍 [CSV_EXPORT] WHERE clause: '{}'", where_clause);
+        tracing::info!("🔍 [CSV_EXPORT] Parameters count: {}", params_vec.len());
+        
         let query = self.build_csv_query(&where_clause);
+        tracing::info!("📝 [CSV_EXPORT] Final query: {}", query);
         
         let rows = self.execute_csv_query(&conn, &query, &params_vec)?;
+        tracing::info!("📊 [CSV_EXPORT] Query returned {} rows", rows.len());
+        
         let csv_output = self.format_csv_output(rows)?;
         
         Ok(csv_output)
     }
     
     fn build_csv_where_clause(&self, request: &JobSearchRequest) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
-        let mut where_clauses = Vec::new();
-        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-        
-        if let Some(ref job_name) = request.job_name {
-            where_clauses.push("job_name LIKE ?");
-            params_vec.push(Box::new(format!("%{}%", job_name)));
-        }
-        
-        if let Some(ref folder_name) = request.folder_name {
-            where_clauses.push("folder_name LIKE ?");
-            params_vec.push(Box::new(format!("%{}%", folder_name)));
-        }
-        
-        if let Some(ref application) = request.application {
-            where_clauses.push("application = ?");
-            params_vec.push(Box::new(application.clone()));
-        }
-        
-        if let Some(critical) = request.critical {
-            where_clauses.push("critical = ?");
-            params_vec.push(Box::new(if critical { 1 } else { 0 }));
-        }
-        
-        if let Some(ref task_type) = request.task_type {
-            where_clauses.push("task_type = ?");
-            params_vec.push(Box::new(task_type.clone()));
-        }
-        
-        if let Some(ref appl_type) = request.appl_type {
-            where_clauses.push("appl_type = ?");
-            params_vec.push(Box::new(appl_type.clone()));
-        }
-        
-        if let Some(ref appl_ver) = request.appl_ver {
-            where_clauses.push("appl_ver = ?");
-            params_vec.push(Box::new(appl_ver.clone()));
-        }
-        
-        let where_clause = if where_clauses.is_empty() {
-            String::new()
-        } else {
-            format!("WHERE {}", where_clauses.join(" AND "))
-        };
-        
-        (where_clause, params_vec)
+        // Use the same comprehensive filtering logic as search_jobs
+        self.build_where_clause(request)
     }
     
     fn build_csv_query(&self, where_clause: &str) -> String {
@@ -1140,6 +1105,7 @@ impl JobRepository {
                 j.task_type, j.critical, j.cyclic, j.owner, j.priority,
                 j.description, j.cmdline
             FROM jobs j
+            LEFT JOIN folders f ON j.folder_name = f.folder_name AND j.datacenter = f.datacenter
             {}
             ORDER BY j.job_name
             "#,
@@ -1153,6 +1119,9 @@ impl JobRepository {
         query: &str,
         params_vec: &[Box<dyn rusqlite::ToSql>],
     ) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, String, String, Option<String>, i32, i32, Option<String>, Option<String>, Option<String>, Option<String>)>> {
+        tracing::info!("🔍 [CSV_QUERY] Executing query: {}", query);
+        tracing::info!("🔍 [CSV_QUERY] With {} parameters", params_vec.len());
+        
         let mut stmt = conn.prepare(query)?;
         let rows = stmt.query_map(
             rusqlite::params_from_iter(params_vec.iter().map(|p| p.as_ref())),
@@ -1175,7 +1144,10 @@ impl JobRepository {
             },
         )?;
         
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
+        let result = rows.collect::<Result<Vec<_>, _>>().map_err(|e| anyhow::anyhow!("CSV query error: {}", e))?;
+        tracing::info!("📊 [CSV_QUERY] Query executed successfully, returned {} rows", result.len());
+        
+        Ok(result)
     }
     
     fn format_csv_output(
